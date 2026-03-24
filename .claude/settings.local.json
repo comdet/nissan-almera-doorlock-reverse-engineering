@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python extract_uds_conversation.py)",
+      "Bash(python extract_both_channels.py)",
+      "Bash(python analyze_unlock_sequence.py)",
+      "Bash(python nissan_door_unlock.py --dry-run --interface slcan --channel COM3 --method both)"
+    ]
+  }
+}

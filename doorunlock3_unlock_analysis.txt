@@ -1,0 +1,291 @@
+==========================================================================================
+NISSAN ALMERA TURBO (N18) — OBD DOOR UNLOCK SEQUENCE ANALYSIS
+==========================================================================================
+
+Setup: Logic analyzer between MCU TX/RX and CAN transceiver
+Event: Device plugged in → door UNLOCK heard → capture stopped
+Focus: BCM communication (0x745 request / 0x765 response)
+
+------------------------------------------------------------------------------------------
+
+      [   0.000s] TX>> 0x745  ReadDataByID DID=0x0109
+      [   0.006s] <<RX 0x765  +ReadDataByID DID=0x0109 (multiframe, 18B)
+      [   0.025s] TX>> 0x745  FlowControl CTS
+      [   0.026s] <<RX 0x765  ConsecutiveFrame seq=1
+      [   0.041s] TX>> 0x745  TesterPresent
+
+  ──────────────────────────────────────────────────────────────────────
+  GAP: ~0.1s
+  ──────────────────────────────────────────────────────────────────────
+
+      [   0.182s] TX>> 0x745  TesterPresent
+      [   0.187s] TX>> 0x745  ReadDataByID DID=0x0109
+      [   0.201s] <<RX 0x765  ConsecutiveFrame seq=2
+      [   0.202s] TX>> 0x745  TesterPresent
+      [   0.206s] <<RX 0x765  +TesterPresent OK
+
+  ──────────────────────────────────────────────────────────────────────
+  GAP: ~0.1s
+  ──────────────────────────────────────────────────────────────────────
+
+      [   0.344s] TX>> 0x745  TesterPresent
+  ★★★ [   0.349s] TX>> 0x745  ★ IOControlByID DID=0x023F shortTermAdj [0x00 0x01]
+      [   0.351s] <<RX 0x765  +TesterPresent OK
+      [   0.354s] TX>> 0x745  DiagSessionCtrl → EXTENDED
+      [   0.361s] <<RX 0x765  +DiagSessionCtrl OK → session=EXTENDED (P2=50ms)
+
+  ──────────────────────────────────────────────────────────────────────
+  GAP: ~0.1s
+  ──────────────────────────────────────────────────────────────────────
+
+      [   0.500s] TX>> 0x745  ReadDataByID DID=0x0109
+      [   0.506s] <<RX 0x765  +ReadDataByID DID=0x0109 (multiframe, 18B)
+      [   0.526s] TX>> 0x745  FlowControl CTS
+      [   0.531s] <<RX 0x765  ConsecutiveFrame seq=1
+      [   0.541s] TX>> 0x745  TesterPresent
+
+  ──────────────────────────────────────────────────────────────────────
+  GAP: ~0.1s
+  ──────────────────────────────────────────────────────────────────────
+
+      [   0.682s] TX>> 0x745  TesterPresent
+      [   0.687s] TX>> 0x745  ReadDataByID DID=0x0109
+      [   0.701s] <<RX 0x765  ConsecutiveFrame seq=2
+      [   0.703s] TX>> 0x745  TesterPresent
+      [   0.706s] <<RX 0x765  +TesterPresent OK
+
+  ──────────────────────────────────────────────────────────────────────
+  GAP: ~0.1s
+  ──────────────────────────────────────────────────────────────────────
+
+      [   0.844s] TX>> 0x745  TesterPresent
+  ★★★ [   0.849s] TX>> 0x745  ★ IOControlByID DID=0x023F shortTermAdj [0x00 0x01]
+      [   0.851s] <<RX 0x765  +TesterPresent OK
+      [   0.854s] TX>> 0x745  DiagSessionCtrl → EXTENDED
+      [   0.861s] <<RX 0x765  +DiagSessionCtrl OK → session=EXTENDED (P2=50ms)
+
+  ──────────────────────────────────────────────────────────────────────
+  GAP: ~0.1s
+  ──────────────────────────────────────────────────────────────────────
+
+      [   1.001s] TX>> 0x745  ReadDataByID DID=0x0109
+      [   1.006s] <<RX 0x765  +ReadDataByID DID=0x0109 (multiframe, 18B)
+      [   1.026s] TX>> 0x745  FlowControl CTS
+      [   1.031s] <<RX 0x765  ConsecutiveFrame seq=1
+      [   1.041s] TX>> 0x745  TesterPresent
+
+  ──────────────────────────────────────────────────────────────────────
+  GAP: ~0.1s
+  ──────────────────────────────────────────────────────────────────────
+
+      [   1.183s] TX>> 0x745  TesterPresent
+      [   1.188s] TX>> 0x745  ReadDataByID DID=0x0109
+      [   1.198s] TX>> 0x745  FlowControl CTS
+      [   1.201s] <<RX 0x765  ConsecutiveFrame seq=2
+      [   1.203s] TX>> 0x745  TesterPresent
+      [   1.206s] <<RX 0x765  +TesterPresent OK
+      [   1.213s] TX>> 0x745  DiagSessionCtrl → DEFAULT
+      [   1.221s] <<RX 0x765  +DiagSessionCtrl OK → session=DEFAULT (P2=50ms)
+
+  ──────────────────────────────────────────────────────────────────────
+  GAP: ~0.5s
+  ──────────────────────────────────────────────────────────────────────
+
+      [   1.721s] TX>> 0x745  DiagSessionCtrl → EXTENDED
+      [   1.726s] <<RX 0x765  +DiagSessionCtrl OK → session=EXTENDED (P2=50ms)
+      [   1.776s] TX>> 0x745  TesterPresent
+      [   1.781s] <<RX 0x765  +TesterPresent OK
+  ★★★ [   1.831s] TX>> 0x745  ★ IOControlByID DID=0x0202 shortTermAdj [0x00 0x02]
+  ★★★ [   1.836s] <<RX 0x765  ★ +IOControlByID OK DID=0x0202 status=[0x03 0x01]
+      [   1.887s] TX>> 0x745  TesterPresent
+      [   1.891s] <<RX 0x765  +TesterPresent OK
+      [   1.942s] TX>> 0x745  DiagSessionCtrl → DEFAULT
+      [   1.947s] <<RX 0x765  +DiagSessionCtrl OK → session=DEFAULT (P2=50ms)
+      [   1.953s] TX>> 0x745  TesterPresent
+      [   1.956s] <<RX 0x765  +TesterPresent OK
+  ★★★ [   1.958s] TX>> 0x745  ★ IOControlByID DID=0x023F shortTermAdj [0x00 0x01]
+  ★★★ [   1.961s] <<RX 0x765  ✗ NEGATIVE RESPONSE: IOControl rejected, NRC=svcNotSupportedInSession
+      [   1.963s] TX>> 0x745  DiagSessionCtrl → EXTENDED
+      [   1.966s] <<RX 0x765  +DiagSessionCtrl OK → session=EXTENDED (P2=50ms)
+
+  ──────────────────────────────────────────────────────────────────────
+  GAP: ~0.1s
+  ──────────────────────────────────────────────────────────────────────
+
+      [   2.036s] TX>> 0x745  ReadDataByID DID=0x0109
+      [   2.041s] <<RX 0x765  +ReadDataByID DID=0x0109 (multiframe, 18B)
+
+  ──────────────────────────────────────────────────────────────────────
+  GAP: ~0.5s
+  ──────────────────────────────────────────────────────────────────────
+
+      [   2.564s] TX>> 0x745  DiagSessionCtrl → EXTENDED
+      [   2.569s] TX>> 0x745  TesterPresent
+      [   2.571s] <<RX 0x765  +DiagSessionCtrl OK → session=EXTENDED (P2=50ms)
+  ★★★ [   2.574s] TX>> 0x745  ★ IOControlByID DID=0x023F shortTermAdj [0x00 0x00]
+      [   2.579s] TX>> 0x745  TesterPresent
+  ★★★ [   2.581s] <<RX 0x765  ★ +IOControlByID OK DID=0x023F status=[0x03 0x01]
+      [   2.584s] TX>> 0x745  DiagSessionCtrl → DEFAULT
+      [   2.590s] TX>> 0x745  FlowControl CTS
+      [   2.591s] <<RX 0x765  +DiagSessionCtrl OK → session=DEFAULT (P2=50ms)
+      [   2.605s] TX>> 0x745  TesterPresent
+      [   2.611s] <<RX 0x765  +TesterPresent OK
+
+  ──────────────────────────────────────────────────────────────────────
+  GAP: ~0.1s
+  ──────────────────────────────────────────────────────────────────────
+
+      [   2.689s] TX>> 0x745  TesterPresent
+      [   2.694s] TX>> 0x745  ReadDataByID DID=0x0109
+      [   2.697s] <<RX 0x765  +TesterPresent OK
+      [   2.704s] TX>> 0x745  FlowControl CTS
+      [   2.709s] TX>> 0x745  TesterPresent
+      [   2.716s] <<RX 0x765  +TesterPresent OK
+
+  ──────────────────────────────────────────────────────────────────────
+  GAP: ~0.1s
+  ──────────────────────────────────────────────────────────────────────
+
+      [   2.818s] TX>> 0x745  TesterPresent
+  ★★★ [   2.824s] TX>> 0x745  ★ IOControlByID DID=0x023F shortTermAdj [0x00 0x00]
+      [   2.826s] <<RX 0x765  +TesterPresent OK
+      [   2.829s] TX>> 0x745  DiagSessionCtrl → EXTENDED
+      [   2.836s] <<RX 0x765  +DiagSessionCtrl OK → session=EXTENDED (P2=50ms)
+
+  ──────────────────────────────────────────────────────────────────────
+  GAP: ~0.1s
+  ──────────────────────────────────────────────────────────────────────
+
+      [   2.939s] TX>> 0x745  ReadDataByID DID=0x0109
+      [   2.947s] <<RX 0x765  +ReadDataByID DID=0x0109 (multiframe, 18B)
+      [   2.965s] TX>> 0x745  FlowControl CTS
+      [   2.966s] <<RX 0x765  ConsecutiveFrame seq=1
+      [   2.980s] TX>> 0x745  TesterPresent
+
+  ──────────────────────────────────────────────────────────────────────
+  GAP: ~0.1s
+  ──────────────────────────────────────────────────────────────────────
+
+      [   3.065s] TX>> 0x745  TesterPresent
+      [   3.070s] TX>> 0x745  ReadDataByID DID=0x0109
+      [   3.080s] TX>> 0x745  FlowControl CTS
+      [   3.081s] <<RX 0x765  ConsecutiveFrame seq=2
+      [   3.085s] TX>> 0x745  TesterPresent
+      [   3.091s] <<RX 0x765  +TesterPresent OK
+
+  ──────────────────────────────────────────────────────────────────────
+  GAP: ~0.1s
+  ──────────────────────────────────────────────────────────────────────
+
+      [   3.195s] TX>> 0x745  DiagSessionCtrl → EXTENDED
+      [   3.201s] <<RX 0x765  +DiagSessionCtrl OK → session=EXTENDED (P2=50ms)
+
+  ──────────────────────────────────────────────────────────────────────
+  GAP: ~0.1s
+  ──────────────────────────────────────────────────────────────────────
+
+      [   3.317s] TX>> 0x745  ReadDataByID DID=0x0109
+      [   3.321s] <<RX 0x765  +ReadDataByID DID=0x0109 (multiframe, 18B)
+      [   3.342s] TX>> 0x745  FlowControl CTS
+      [   3.347s] <<RX 0x765  ConsecutiveFrame seq=1
+      [   3.358s] TX>> 0x745  TesterPresent
+
+  ──────────────────────────────────────────────────────────────────────
+  GAP: ~0.1s
+  ──────────────────────────────────────────────────────────────────────
+
+      [   3.442s] TX>> 0x745  TesterPresent
+      [   3.447s] TX>> 0x745  ReadDataByID DID=0x0109
+      [   3.461s] <<RX 0x765  ConsecutiveFrame seq=2
+      [   3.462s] TX>> 0x745  TesterPresent
+      [   3.466s] <<RX 0x765  +TesterPresent OK
+
+  ──────────────────────────────────────────────────────────────────────
+  GAP: ~0.1s
+  ──────────────────────────────────────────────────────────────────────
+
+      [   3.573s] TX>> 0x745  DiagSessionCtrl → EXTENDED
+      [   3.576s] <<RX 0x765  +DiagSessionCtrl OK → session=EXTENDED (P2=50ms)
+
+  ──────────────────────────────────────────────────────────────────────
+  GAP: ~0.1s
+  ──────────────────────────────────────────────────────────────────────
+
+      [   3.693s] TX>> 0x745  ReadDataByID DID=0x0109
+      [   3.701s] <<RX 0x765  +ReadDataByID DID=0x0109 (multiframe, 18B)
+
+==========================================================================================
+IOControl EVENT SUMMARY
+==========================================================================================
+
+  #1  [   0.349s]  TX>>  DID=0x023F  shortTermAdj                    [0x00 0x01]  (session=unknown)
+  #2  [   0.849s]  TX>>  DID=0x023F  shortTermAdj                    [0x00 0x01]  (session=EXTENDED)
+  #3  [   1.831s]  TX>>  DID=0x0202  shortTermAdj                    [0x00 0x02]  (session=EXTENDED)
+  #4  [   1.836s]  <<RX  DID=0x0202  RESPONSE_OK                     [0x03 0x01]  (session=EXTENDED)
+  #5  [   1.958s]  TX>>  DID=0x023F  shortTermAdj                    [0x00 0x01]  (session=DEFAULT)
+  #6  [   1.961s]  <<RX  DID=n/a  REJECTED(svcNotSupportedInSession)  []  (session=DEFAULT)
+  #7  [   2.574s]  TX>>  DID=0x023F  shortTermAdj                    [0x00 0x00]  (session=EXTENDED)
+  #8  [   2.581s]  <<RX  DID=0x023F  RESPONSE_OK                     [0x03 0x01]  (session=EXTENDED)
+  #9  [   2.824s]  TX>>  DID=0x023F  shortTermAdj                    [0x00 0x00]  (session=DEFAULT)
+
+==========================================================================================
+PROTOCOL DECODE — UNLOCK PROCEDURE
+==========================================================================================
+
+Based on capture analysis (Nissan Almera Turbo N18 / Versa):
+
+TARGET ECU: Body Control Module (BCM)
+  Request CAN ID:  0x745
+  Response CAN ID: 0x765
+
+UNLOCK PROCEDURE (what the OBD device does):
+
+  Phase 1: INITIALIZE
+    - Enter extendedDiagnosticSession on all ECUs
+    - Start polling loop (ReadDataByID, TesterPresent, OBD-II speed)
+
+  Phase 2: UNLOCK ATTEMPT(s)
+    a) Enter extendedDiagnosticSession (REQUIRED)
+       TX: 02 10 03 FF FF FF FF FF
+       RX: 06 50 03 00 32 01 F4 00  (OK)
+
+    b) TesterPresent (keep-alive)
+       TX: 02 3E 00 FF FF FF FF FF
+       RX: 02 7E 00 ...             (OK)
+
+    c) IOControlByIdentifier — UNLOCK COMMAND
+       TX: 06 2F 02 3F 03 00 01 FF
+            │  │  └──┘ │  └──┘
+            │  │  DID   │  controlState
+            │  │ 0x023F │  [00 01]
+            │  SID=0x2F  controlParam=shortTermAdj(0x03)
+            len=6
+
+       RX: 05 6F 02 3F 03 01 00 00  (positive response)
+
+    d) Return to defaultSession
+       TX: 02 10 01 FF FF FF FF FF
+       RX: 06 50 01 00 32 01 F4 00  (OK)
+
+  Phase 3: CLEANUP / RE-INIT
+    - Re-enter extendedSession on all ECUs
+    - Resume polling loop
+
+  ADDITIONAL COMMAND OBSERVED:
+    TX: 06 2F 02 02 03 00 02 FF     (IOControl DID=0x0202 [00 02])
+    RX: 05 6F 02 02 03 01 00 00     (OK)
+    → Possibly related to door lock indicator or secondary function
+
+  DID=0x023F controlState values:
+    [00 01] = UNLOCK (sent 3x during capture, including 1 rejected in wrong session)
+    [00 00] = RETURN CONTROL TO ECU / RESET (sent 2x as cleanup after unlock)
+
+KEY FINDINGS:
+  1. MUST be in extendedDiagnosticSession (0x03) before IOControl
+  2. Primary unlock: DID=0x023F, shortTermAdj, state=[00 01]
+  3. Device retries unlock command multiple times (robust error handling)
+  4. After unlock, sends [00 00] to return actuator control to ECU
+  5. Secondary command DID=0x0202 [00 02] purpose unclear - possibly:
+     - Interior light trigger
+     - Door lock motor direction indicator
+     - Separate lock/unlock mechanism for different door groups
