@@ -1,0 +1,16 @@
+# Data files
+doorunlock3.txt
+doorunlock3_d2.txt
+
+# Capture files
+*.sr
+*.pvs
+
+# Local settings
+.claude/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class

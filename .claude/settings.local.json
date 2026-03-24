@@ -4,7 +4,10 @@
       "Bash(python extract_uds_conversation.py)",
       "Bash(python extract_both_channels.py)",
       "Bash(python analyze_unlock_sequence.py)",
-      "Bash(python nissan_door_unlock.py --dry-run --interface slcan --channel COM3 --method both)"
+      "Bash(python nissan_door_unlock.py --dry-run --interface slcan --channel COM3 --method both)",
+      "Bash(sed -i 's/^### 2\\\\.\\\\\\([0-9]\\\\\\)/### 3.\\\\1/g' README.md)",
+      "Bash(sed -i 's/^### 13\\\\.2 DiagnosticSessionControl/### 11.2 DiagnosticSessionControl/g' README.md)",
+      "Bash(sed -i 's/^### 13\\\\.3 TesterPresent/### 11.3 TesterPresent/g' README.md)"
     ]
   }
 }
