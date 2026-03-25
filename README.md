@@ -303,7 +303,9 @@ CAN Bus (รถ)
 | `extract_uds_conversation.py` | แกะ frame จาก RX พร้อม decode UDS เต็มรูปแบบ |
 | `extract_both_channels.py` | แกะทั้ง RX + TX รวม timeline |
 | `analyze_unlock_sequence.py` | วิเคราะห์เฉพาะ sequence การ unlock ที่ BCM |
-| `nissan_door_unlock.py` | **script สำหรับส่งคำสั่ง unlock จริง** (ต้องใช้กับ CAN adapter) |
+| `nissan_door_unlock.py` | script สำหรับส่งคำสั่ง unlock จริง (command-line, ต้องใช้กับ CAN adapter) |
+| `nissan_door_lock.py` | script ครบ 4 feature (Drive Lock, Power Off Unlock, Circular Locking, DRL) |
+| `nissan_diag.py` | **interactive diagnostic tool** — มีเมนู, config, sniff, raw CAN/UDS, DID scan |
 
 ---
 
@@ -830,12 +832,53 @@ python extract_both_channels.py
 python analyze_unlock_sequence.py
 ```
 
-### 13.2 Script สั่ง Unlock จริง (nissan_door_unlock.py)
+### 13.2 Interactive Diagnostic Tool (nissan_diag.py) — แนะนำ
+
+เครื่องมือหลักสำหรับ debug และทดสอบ มี interactive menu ไม่ต้องจำ argument
 
 **ต้องการ:**
 - Python 3
-- python-can library: `pip install python-can`
-- CAN adapter ที่รองรับ python-can (เช่น CANable, PEAK PCAN-USB, SocketCAN)
+- `pip install python-can pyserial`
+- CAN adapter ที่รองรับ python-can (ดูตาราง interface ด้านล่าง)
+
+```bash
+python nissan_diag.py
+```
+
+**เมนูหลัก:**
+
+```
+  [c] Connect        [d] Disconnect      [s] Settings
+  --- Diagnose ---
+  [1] Sniff bus          [2] Loopback test
+  [3] Raw UDS (BCM)      [4] Raw CAN frame
+  [5] Scan DIDs
+  --- Door Lock ---
+  [6] Unlock door        [7] Lock door
+  [8] Full capture replay
+  --- DRL ---
+  [9] DRL on/off
+  [q] Quit
+```
+
+**Settings `[s]` — ปรับค่าทุกอย่างได้:**
+
+| Setting | คำอธิบาย | Default |
+|---------|---------|---------|
+| Interface | slcan, socketcan, pcan, kvaser, etc. | slcan |
+| Channel | serial port เช่น /dev/tty.usbserial-1240, COM3, can0 | (ต้องตั้ง) |
+| CAN bitrate | ความเร็ว CAN bus | 500000 |
+| TTY baudrate | ความเร็ว serial port (สำหรับ slcan adapter) | 115200 |
+| UDS timeout | เวลารอ response จาก ECU | 2.0s |
+
+- Config จะบันทึกเป็น `.nissan_diag_config.json` — ครั้งหน้ารันไม่ต้อง config ใหม่
+- มี auto-detect serial ports พร้อมแสดง manufacturer, VID:PID
+- Sniff mode มี frame decode อัตโนมัติ (DiagSession, IOControl, TesterPresent, etc.)
+- Raw UDS mode มี shortcuts: `ext` = ExtendedSession, `tp` = TesterPresent
+
+### 13.3 Script สั่งงานผ่าน command-line (nissan_door_unlock.py)
+
+สำหรับสั่ง unlock ครั้งเดียวผ่าน command-line:
 
 ```bash
 # ดู frame ที่จะส่ง โดยไม่ส่งจริง (dry-run)
@@ -849,19 +892,51 @@ python nissan_door_unlock.py -i slcan -c COM3 --method 0202
 
 # สั่ง unlock ด้วยทั้ง 2 DID (เหมือนที่อุปกรณ์เดิมทำ)
 python nissan_door_unlock.py -i slcan -c COM3 --method both
+
+# sniff CAN bus 10 วินาที
+python nissan_door_unlock.py -i slcan -c COM3 --sniff 10
+
+# debug mode — แสดงทุก frame ที่ได้รับ
+python nissan_door_unlock.py -i slcan -c COM3 --debug
 ```
 
-**ตัวเลือก interface ที่รองรับ:**
+### 13.4 Script ครบ 4 Feature (nissan_door_lock.py)
+
+script ที่จำลองการทำงานของ OBD Door Lock Device ทั้ง 4 feature:
+
+```bash
+# รันแบบ daemon (ทำงานทุก feature)
+python nissan_door_lock.py -i slcan -c COM3
+
+# สั่งทีละคำสั่ง
+python nissan_door_lock.py -i slcan -c COM3 --cmd unlock
+python nissan_door_lock.py -i slcan -c COM3 --cmd lock
+python nissan_door_lock.py -i slcan -c COM3 --cmd drl-on
+python nissan_door_lock.py -i slcan -c COM3 --cmd drl-off
+
+# dry-run — ดู frame ที่จะส่ง
+python nissan_door_lock.py -i slcan -c COM3 --dry-run
+
+# ปรับ threshold
+python nissan_door_lock.py -i slcan -c COM3 --speed-threshold 25 --unlock-delay 5
+```
+
+### 13.5 ตัวเลือก interface ที่รองรับ
 
 | interface | ตัวอย่าง channel | อุปกรณ์ |
 |-----------|-----------------|--------|
-| slcan | COM3 (Windows), /dev/ttyACM0 (Linux) | CANable, USBtin |
+| slcan | COM3 (Windows), /dev/ttyACM0 (Linux), /dev/tty.usbserial-* (macOS) | CANable, USBtin |
 | socketcan | can0 | Linux SocketCAN |
 | pcan | PCAN_USBBUS1 | PEAK PCAN-USB |
 | kvaser | 0 | Kvaser Leaf Light |
 | ixxat | 0 | IXXAT USB-to-CAN |
+| gs_usb | - | CANable (candlelight firmware) |
 
-### 13.3 Failsafe ในตัว Script
+**ข้อกำหนด CAN adapter:** ต้องมี CAN controller (เช่น MCP2515 หรือ MCU ที่มี CAN built-in อย่าง STM32)
+และ CAN transceiver (เช่น MCP2551, TJA1050, SN65HVD230) — adapter ที่มีแค่ USB-serial (CH340)
+กับ comparator (LM339) ไม่สามารถส่ง/รับ CAN frame ได้
+
+### 13.6 Failsafe ในตัว Script
 
 1. **Auto-retry เมื่อ session ผิด:** ถ้า ECU ตอบ NRC=0x7F จะเข้า Extended Session ใหม่แล้วส่งซ้ำ
 2. **Response Pending:** ถ้า ECU ตอบ NRC=0x78 (กำลังประมวลผล) จะรอเพิ่มอีก 5 วินาที

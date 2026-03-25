@@ -378,6 +378,19 @@ def main():
         "--dry-run", action="store_true",
         help="Print what would be sent without actually sending"
     )
+    parser.add_argument(
+        "--sniff", type=float, nargs="?", const=5.0, default=None,
+        metavar="SECONDS",
+        help="Sniff all CAN traffic for N seconds (default: 5) to verify bus connection"
+    )
+    parser.add_argument(
+        "--debug", action="store_true",
+        help="Show all received CAN frames during unlock sequence"
+    )
+    parser.add_argument(
+        "--tty-baudrate", type=int, default=None,
+        help="Serial port baud rate for slcan adapter (default: auto)"
+    )
 
     args = parser.parse_args()
 
@@ -404,20 +417,73 @@ def main():
         print(f"     TX 0x{BCM_REQUEST_ID:03X}: [02 10 01 FF FF FF FF FF]")
         return
 
+    # --- Connect to CAN bus ---
     print(f"Connecting to CAN bus: {args.interface} / {args.channel} @ {args.bitrate}")
+    bus_kwargs = dict(
+        interface=args.interface,
+        channel=args.channel,
+        bitrate=args.bitrate,
+    )
+    if args.tty_baudrate and args.interface == "slcan":
+        bus_kwargs["ttyBaudrate"] = args.tty_baudrate
     try:
-        bus = can.Bus(
-            interface=args.interface,
-            channel=args.channel,
-            bitrate=args.bitrate,
-        )
+        bus = can.Bus(**bus_kwargs)
     except Exception as e:
         print(f"ERROR: Cannot open CAN bus: {e}")
         sys.exit(1)
 
     print("Connected!\n")
 
+    # --- Sniff mode: just listen and print all frames ---
+    if args.sniff is not None:
+        duration = args.sniff
+        print(f"SNIFF MODE — listening for {duration}s on CAN bus...\n")
+        print(f"{'Time':>10s}  {'CAN ID':>8s}  {'DLC':>3s}  Data")
+        print("-" * 60)
+        start = time.time()
+        count = 0
+        id_counts = {}
+        try:
+            while time.time() - start < duration:
+                msg = bus.recv(timeout=0.5)
+                if msg is not None:
+                    count += 1
+                    data_hex = " ".join(f"{b:02X}" for b in msg.data)
+                    elapsed = time.time() - start
+                    cid = f"0x{msg.arbitration_id:03X}"
+                    print(f"  {elapsed:8.3f}s  {cid:>8s}  {msg.dlc:>3d}  [{data_hex}]")
+                    id_counts[msg.arbitration_id] = id_counts.get(msg.arbitration_id, 0) + 1
+        except KeyboardInterrupt:
+            pass
+        print("-" * 60)
+        print(f"\nTotal frames received: {count}")
+        if id_counts:
+            print("\nFrames per CAN ID:")
+            for cid in sorted(id_counts.keys()):
+                print(f"  0x{cid:03X}: {id_counts[cid]}")
+        else:
+            print("\n*** NO FRAMES RECEIVED ***")
+            print("Possible issues:")
+            print("  1. CAN adapter not connected to vehicle")
+            print("  2. Vehicle ignition is OFF (many ECUs sleep when off)")
+            print("  3. Wrong bitrate (try 250000 or 500000)")
+            print("  4. slcan adapter needs --tty-baudrate (try 115200 or 921600)")
+            print("  5. CAN-H/CAN-L wires swapped or not connected")
+        bus.shutdown()
+        return
+
     bcm = NissanBCM(bus, timeout=args.timeout)
+
+    # Patch _recv_response for debug mode
+    if args.debug:
+        _original_recv = bcm.bus.recv
+        def _debug_recv(timeout=None):
+            msg = _original_recv(timeout=timeout)
+            if msg is not None:
+                data_hex = " ".join(f"{b:02X}" for b in msg.data)
+                print(f"  [DEBUG RX] 0x{msg.arbitration_id:03X} [{data_hex}]")
+            return msg
+        bcm.bus.recv = _debug_recv
 
     try:
         result = unlock_door(bcm, method=args.method)
