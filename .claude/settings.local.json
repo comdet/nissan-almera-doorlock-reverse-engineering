@@ -7,7 +7,30 @@
       "Bash(python nissan_door_unlock.py --dry-run --interface slcan --channel COM3 --method both)",
       "Bash(sed -i 's/^### 2\\\\.\\\\\\([0-9]\\\\\\)/### 3.\\\\1/g' README.md)",
       "Bash(sed -i 's/^### 13\\\\.2 DiagnosticSessionControl/### 11.2 DiagnosticSessionControl/g' README.md)",
-      "Bash(sed -i 's/^### 13\\\\.3 TesterPresent/### 11.3 TesterPresent/g' README.md)"
+      "Bash(sed -i 's/^### 13\\\\.3 TesterPresent/### 11.3 TesterPresent/g' README.md)",
+      "WebSearch",
+      "WebFetch(domain:docs.espressif.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:www.arduinolibraries.info)",
+      "Bash(pip3 show platformio)",
+      "Bash(pip3 --version)",
+      "Bash(pip3 install platformio)",
+      "Bash(pipx install platformio)",
+      "Bash(pio run)",
+      "Bash(ls /dev/cu.usb*)",
+      "Bash(ls /dev/tty.usb*)",
+      "Bash(pio run -t upload --upload-port /dev/cu.usbmodem101)",
+      "Bash(ls -la /Users/comdet/Desktop/nissan-almera-doorlock-reverse-engineering/*.py /Users/comdet/Desktop/nissan-almera-doorlock-reverse-engineering/*.md)",
+      "Bash(python3 nissan_door_unlock.py -i slcan -c /dev/cu.usbmodem101 --sniff 5)",
+      "Bash(pipx install python-can)",
+      "Bash(pip3 install --user python-can)",
+      "Bash(python3 -c \"import can; print\\(''OK''\\)\")",
+      "Bash(python3 -c \"import can; print\\(''python-can OK''\\)\")",
+      "Bash(python3 -m venv .venv)",
+      "Bash(source .venv/bin/activate)",
+      "Bash(pip install python-can pyserial)",
+      "Bash(.venv/bin/python nissan_door_unlock.py -i slcan -c /dev/cu.usbmodem101 --sniff 5)",
+      "Bash(.venv/bin/python nissan_door_unlock.py -i slcan -c /dev/cu.usbmodem101 --sniff 10)"
     ]
   }
 }
