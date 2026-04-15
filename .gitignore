@@ -14,3 +14,4 @@ doorunlock3_d2.txt
 __pycache__/
 *.py[cod]
 *$py.class
+firebase-debug.log
