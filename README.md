@@ -943,3 +943,51 @@ python nissan_door_lock.py -i slcan -c COM3 --speed-threshold 25 --unlock-delay 
 3. **Timeout handling:** ทุกคำสั่งมี timeout (default 2 วินาที) ป้องกันค้าง
 4. **คืน control ให้ ECU เสมอ:** ส่ง IOControl [00 00] หลังสั่งเสร็จ เพื่อให้ ECU กลับทำงานปกติ
 5. **กลับ Default Session เสมอ:** ไม่ว่าสำเร็จหรือล้มเหลว จะกลับ Default Session ก่อนจบ
+
+---
+
+## 14. ELM327 WiFi Adapter — ผลทดสอบจริง (2025-04-15)
+
+### 14.1 สิ่งที่ทดสอบ
+
+ทดสอบส่งคำสั่ง UDS ผ่าน ELM327 WiFi adapter (ESP8266 + ELM327 v1.5 clone) ไปยัง BCM ของ Nissan Almera Turbo (N18) โดยเชื่อมต่อผ่าน ESP32-C3 USB bridge
+
+**Path:** PC → USB Serial (COM4) → ESP32-C3 bridge → WiFi (WIFI_OBDII) → TCP 192.168.0.10:35000 → ELM327 → CAN Bus → BCM (0x745)
+
+### 14.2 ผลลัพธ์ — BLOCKER: payload limit 4 bytes
+
+ELM327 v1.5 clone มีขีดจำกัด **สูงสุด 4 bytes** ของ UDS payload ใน ATCAF1 mode:
+
+| Payload | คำสั่ง | ผลลัพธ์ |
+|---------|--------|---------|
+| 2 bytes | `10 03` (DiagSession Extended) | ✅ ได้ response (0x7E8: `50 03 00 32 01 F4`) |
+| 2 bytes | `3E 00` (TesterPresent) | ✅ ได้ response (0x7E8: `7E 00`) |
+| 3 bytes | `2F 02 3F` (IOControl ไม่ครบ) | ✅ ได้ NRC 0x13 (incorrectMessageLength) |
+| 4 bytes | `10 03 00 00` | ✅ ได้ NRC 0x13 |
+| **5 bytes** | `2F 02 3F 03 00` | ❌ `?` (clone ปฏิเสธก่อนส่ง) |
+| **6 bytes** | `2F 02 3F 03 00 01` (IOControl unlock) | ❌ `?` (clone ปฏิเสธก่อนส่ง) |
+
+**IOControl unlock ต้องการ 6 bytes: `2F 02 3F 03 00 01`** → เกิน limit
+
+### 14.3 ฟีเจอร์ ELM327 ที่ใช้ไม่ได้บน clone นี้
+
+| คำสั่ง | ผลลัพธ์ |
+|--------|---------|
+| `ATCAF0` (raw CAN mode) | รับ OK แต่ส่งข้อมูลแล้ว `NO DATA` ทุกกรณี |
+| `ATCRA 765` (receive address filter) | รับ OK แต่ไม่มีผล ยังเห็น 0x7E8 |
+| `ATCF`/`ATCM` (CAN filter/mask) | รับ OK แต่ไม่มีผลเหมือนกัน |
+| Protocol B (`ATPB C0 00`, `ATSP B`) | รับ OK แต่ payload limit เท่าเดิม |
+| `ATAL` (Allow Long messages) | รับ OK แต่ไม่ช่วย |
+
+### 14.4 สิ่งที่ใช้ได้
+
+- `ATRV` → 12.2V (อ่าน battery voltage ได้)
+- `ATZ` → ELM327 v1.5 (reset ได้)
+- `ATE0`, `ATL0`, `ATSP6`, `ATSH 745`, `ATCAF1`, `ATH1`, `ATST FF` — ทุกคำสั่ง setup ทำงานปกติ
+- DiagSessionControl (2 bytes) และ TesterPresent (2 bytes) ส่งได้ แต่ response มาจาก ECM (0x7E8) ไม่ใช่ BCM (0x765)
+
+### 14.5 แนวทางแก้ไข (ยังไม่ได้ทดสอบ)
+
+1. **เช็ค STN1110** — ส่ง `STI` ดูว่า clone เป็น STN1110 ที่ซ่อนอยู่หรือไม่ (ถ้าใช่ `STPX` ส่ง raw CAN ได้ไม่จำกัด)
+2. **ELM327 v2.x ของแท้** — ไม่มี payload limit
+3. **ESP32-C3 + SN65HVD230 CAN transceiver** — ใช้ SLCAN firmware จาก `firmware/` ใน repo นี้ ต่อ CAN bus ตรง ไม่ผ่าน ELM327
