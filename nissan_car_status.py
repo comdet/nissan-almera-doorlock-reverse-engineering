@@ -162,15 +162,33 @@ def decode_doors(did_0109):
     result['unlocked'] = b8 == 0x10
     result['lock_status'] = 'LOCKED' if b8 == 0x00 else 'UNLOCKED' if b8 == 0x10 else f'?(0x{b8:02X})'
 
+    # Byte 17: brake pedal
+    if len(did_0109) > 17:
+        b17 = did_0109[17]
+        result['brake_pedal'] = b17 != 0x00
+        result['brake_pedal_raw'] = b17
+
     return result
 
 
 def decode_gear(did_0108):
-    """Decode DID 0x0108 byte 27 → gear string."""
+    """Decode DID 0x0108 byte 27 → gear string.
+
+    Note: byte 27 is reliable for gear only when engine is running.
+    When engine is off, handbrake/engine state contaminates the value.
+    """
     if not did_0108 or len(did_0108) < 28:
         return None
     b27 = did_0108[27]
     return GEAR_MAP.get(b27, f'?(0x{b27:02X})')
+
+
+def decode_handbrake(did_0e07):
+    """Decode DID 0x0E07 byte 19 → handbrake status."""
+    if not did_0e07 or len(did_0e07) < 20:
+        return None
+    b19 = did_0e07[19]
+    return b19 == 0x10  # True = ON
 
 
 def decode_engine(did_1301, did_1304):
@@ -203,6 +221,13 @@ def read_car_status(bus):
     gear = decode_gear(d)
     if gear:
         status['gear'] = gear
+
+    # Handbrake (DID 0x0E07)
+    d = bus.read_did(0x743, 0x0E07)
+    hb = decode_handbrake(d)
+    if hb is not None:
+        status['handbrake'] = hb
+        status['handbrake_status'] = 'ON' if hb else 'OFF'
 
     # Engine DIDs
     d1 = bus.read_did(0x7E1, 0x1301)
@@ -251,6 +276,7 @@ def print_status(s):
 
     print('  --- Transmission ---')
     print(f'  Gear           : {s.get("gear", "?")}')
+    print(f'  Handbrake      : {s.get("handbrake_status", "?")}')
 
     print('  --- Doors ---')
     print(f'  Lock           : {s.get("lock_status", "?")}')
@@ -260,6 +286,7 @@ def print_status(s):
             state = 'OPEN' if s[key] else 'closed'
             label = name.replace('_', ' ').title()
             print(f'  {label:15s}: {state}')
+    print(f'  Brake Pedal    : {"PRESSED" if s.get("brake_pedal") else "released"}')
 
 
 # ============================================================================
