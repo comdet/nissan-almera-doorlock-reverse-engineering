@@ -35,7 +35,7 @@
 // เปลี่ยน pin ได้ตามต้องการ (ESP32-C3 ใช้ GPIO ไหนก็ได้ผ่าน GPIO Matrix)
 // หลีกเลี่ยง GPIO2, GPIO8, GPIO9 (strapping pins)
 #define CAN_TX_PIN  GPIO_NUM_4
-#define CAN_RX_PIN  GPIO_NUM_5
+#define CAN_RX_PIN  GPIO_NUM_3
 
 // ===================== SLCAN Configuration =====================
 #define SLCAN_SERIAL       Serial        // USB CDC serial
@@ -96,7 +96,7 @@ static bool canInit(uint32_t speed) {
         default:      timingConfig = TWAI_TIMING_CONFIG_500KBITS();  break;
     }
 
-    twai_general_config_t generalConfig = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, TWAI_MODE_LISTEN_ONLY);
+    twai_general_config_t generalConfig = TWAI_GENERAL_CONFIG_DEFAULT(CAN_TX_PIN, CAN_RX_PIN, TWAI_MODE_NORMAL);
     generalConfig.rx_queue_len = 64;
     generalConfig.tx_queue_len = 16;
 

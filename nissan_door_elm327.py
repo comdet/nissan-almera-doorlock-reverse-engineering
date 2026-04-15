@@ -68,7 +68,10 @@ class ELM327:
             sys.exit(1)
         ser = pyserial.Serial(port, baudrate, timeout=1)
         elm = cls(ser, verbose)
-        time.sleep(0.5)
+        # Longer wait for WiFi bridge adapters (ESP32-C3 → ELM327 WiFi)
+        if verbose:
+            print("  Waiting for adapter...")
+        time.sleep(3.0)
         elm._drain()
         return elm
 
@@ -90,6 +93,15 @@ class ELM327:
             self.conn.settimeout(5)
         else:
             self.conn.reset_input_buffer()
+            # Keep reading until silence (ELM327 may still be sending)
+            time.sleep(0.05)
+            for _ in range(10):
+                n = self.conn.in_waiting
+                if n:
+                    self.conn.read(n)
+                    time.sleep(0.05)
+                else:
+                    break
 
     def _read_until_prompt(self, timeout=3.0):
         """Read data until '>' prompt or timeout."""
@@ -188,33 +200,42 @@ class NissanBCM:
 
     def __init__(self, elm):
         self.elm = elm
+        self._method = None   # best known method: 'standard', 'atcaf0', 'stpx'
 
     def setup(self):
-        """Configure ELM327 for Nissan BCM (CAN 500kbps, header 0x745).
-
-        ATCAF1 + ATCRA 765: auto formatting handles ISO-TP framing,
-        ATCRA filters responses to BCM (0x765) instead of default 0x7E8.
-        """
+        """Configure ELM327 for Nissan BCM (CAN 500kbps, header 0x745)."""
         print("\n--- ELM327 Setup ---")
 
-        resp = self.elm.cmd("ATZ", timeout=4)
-        ver = " ".join(resp) if resp else "?"
+        # Reset — wait extra for clone to finish boot
+        self.elm.cmd("ATZ", timeout=4)
+        time.sleep(1.0)
+        self.elm._drain()
+
+        # Echo off FIRST — critical for clean response parsing
+        self.elm.cmd("ATE0")
+        time.sleep(0.1)
+        self.elm._drain()
+
+        resp = self.elm.cmd("ATI")
+        ver = resp[0] if resp else "?"
         print(f"  ELM327: {ver}")
 
         cmds = [
-            ("ATE0",      "echo off"),
             ("ATL0",      "linefeeds off"),
             ("ATSP6",     "CAN 500kbps (ISO 15765-4)"),
             ("ATSH 745",  "header -> BCM (0x745)"),
             ("ATCAF1",    "CAN auto formatting ON"),
             ("ATH1",      "show response headers"),
-            ("ATCRA 765", "receive filter -> BCM response (0x765)"),
             ("ATST FF",   "timeout max (~1s)"),
         ]
         for cmd, desc in cmds:
             self.elm.cmd(cmd)
             if self.elm.verbose:
                 print(f"         {cmd:10s}  {desc}")
+
+        # Skip ATCRA — v1.5 clones don't filter properly and
+        # cause spurious '?' on every response.  Accept all CAN IDs.
+        self._atcra_set = False
 
         print("--- Ready ---\n")
 
@@ -226,7 +247,13 @@ class NissanBCM:
           Stripped: '765 50 03 00 32 01 F4'     (first data byte is SID+0x40)
           Raw:      '765 06 50 03 00 32 01 F4'  (first data byte is PCI)
 
+        Clone quirk: some clones return '?' alongside valid data when
+        ATCRA filter doesn't match the response CAN ID.  We skip error
+        lines and look for real data first.
+
         Returns (can_id:int|None, uds_payload:list[int], error:str|None)"""
+        first_error = None
+
         for line in lines:
             upper = line.strip().upper()
 
@@ -234,9 +261,11 @@ class NissanBCM:
             if upper.startswith("[WIFI]") or upper.startswith("[TCP]"):
                 continue
 
-            # ELM327 error?
+            # ELM327 error keyword — remember but don't bail yet
             if upper in ELM_ERRORS or upper.startswith("BUS INIT"):
-                return None, [], upper
+                if first_error is None:
+                    first_error = upper
+                continue
 
             parts = line.split()
             if len(parts) < 2:
@@ -264,7 +293,8 @@ class NissanBCM:
             except ValueError:
                 continue
 
-        return None, [], "UNPARSEABLE"
+        # No valid data found — return the first error we saw
+        return None, [], first_error or "UNPARSEABLE"
 
     def send_uds(self, uds_hex, label=""):
         """Send UDS command (ATCAF1 adds ISO-TP framing automatically).
@@ -292,6 +322,28 @@ class NissanBCM:
             if self.elm.verbose:
                 print(f"  !! REJECTED: NRC=0x{nrc:02X} ({nrc_name})")
             return False, can_id, payload
+
+        # Validate response SID matches request SID.
+        # Catches stale responses from earlier commands (e.g., late
+        # TesterPresent 0x7E arriving during IOControl window).
+        if payload:
+            try:
+                req = bytes.fromhex(uds_hex.replace(" ", ""))
+                # SID could be at [0] (ATCAF1) or [1] (ATCAF0 with PCI)
+                expected = set()
+                if len(req) >= 1:
+                    expected.add((req[0] + 0x40) & 0xFF)
+                if len(req) >= 2:
+                    expected.add((req[1] + 0x40) & 0xFF)
+                if payload[0] not in expected:
+                    if self.elm.verbose:
+                        print(f"  !! SID mismatch: got 0x{payload[0]:02X},"
+                              f" expected one of"
+                              f" {{{', '.join(f'0x{s:02X}' for s in sorted(expected))}}}"
+                              f" -- stale response from another command")
+                    return False, can_id, "SID_MISMATCH"
+            except (ValueError, IndexError):
+                pass
 
         return True, can_id, payload
 
@@ -375,6 +427,296 @@ class NissanBCM:
                 return float(m.group(1))
         return None
 
+    # ---- Adapter Probe & Alternative Methods ----
+
+    def probe(self):
+        """Detect adapter type and capabilities. Returns info dict."""
+        print("\n" + "=" * 50)
+        print("  ADAPTER PROBE")
+        print("=" * 50)
+        info = {}
+
+        # ATI — standard ELM327 version
+        resp = self.elm.cmd("ATI")
+        info['version'] = resp[0] if resp else "?"
+        print(f"  ELM327 version : {info['version']}")
+
+        # STI — STN1110 detection
+        resp = self.elm.cmd("STI")
+        is_stn = bool(resp) and all("?" not in l for l in resp)
+        info['is_stn'] = is_stn
+        if is_stn:
+            info['stn_version'] = resp[0] if resp else "?"
+            print(f"  STN1110        : YES  {info['stn_version']}")
+            stdi = self.elm.cmd("STDI")
+            if stdi:
+                info['stn_device'] = stdi
+                for l in stdi:
+                    print(f"                   {l}")
+        else:
+            print("  STN1110        : NO")
+
+        # ATCAF1 payload limit test
+        print("\n  Testing ATCAF1 payload limit...")
+        max_pl = self._test_payload_limit()
+        info['max_payload'] = max_pl
+        print(f"  Max payload (ATCAF1): {max_pl} bytes")
+        if max_pl < 6:
+            print(f"  !! IOControl needs 6 bytes -- ATCAF1 BLOCKED")
+
+        # ATCAF0 raw mode test
+        print("\n  Testing ATCAF0 raw CAN mode...")
+        caf0_result = self._test_atcaf0()
+        info['atcaf0'] = caf0_result
+        if caf0_result == 'ok':
+            print("  ATCAF0 raw send: OK (got BCM response)")
+        elif caf0_result == 'sent_no_resp':
+            print("  ATCAF0 raw send: SENT but NO DATA (may still work)")
+        else:
+            print(f"  ATCAF0 raw send: FAILED ({caf0_result})")
+
+        # Determine best method
+        print("\n  --- Recommendation ---")
+        if max_pl >= 6:
+            self._method = 'standard'
+            print("  -> Standard ATCAF1 mode (payload fits)")
+        elif caf0_result in ('ok', 'sent_no_resp'):
+            self._method = 'atcaf0'
+            print("  -> ATCAF0 raw CAN mode (bypass payload limit)")
+        elif is_stn:
+            self._method = 'stpx'
+            print("  -> STN1110 STPX mode")
+        else:
+            self._method = 'atcaf0'  # try anyway as best guess
+            print("  -> Will try ATCAF0 (best available option)")
+            print("     If that fails, need ELM327 v2.x or direct CAN adapter")
+        print("=" * 50 + "\n")
+
+        return info
+
+    def _test_payload_limit(self):
+        """Test max bytes the clone accepts in ATCAF1 mode."""
+        max_ok = 0
+        for n in range(2, 8):
+            # DiagSessionControl Default (10 01) + padding bytes
+            payload = "10 01" + " 00" * (n - 2) if n > 2 else "10 01"
+            lines = self.elm.cmd(payload, timeout=2)
+            has_q = any(l.strip() == "?" for l in lines)
+            has_data = any(self._line_has_can_data(l) for l in lines)
+            if has_q and not has_data:
+                # '?' with no data = clone genuinely rejected the payload
+                break
+            if has_data or not has_q:
+                max_ok = n
+        # Re-enter extended session (test sent Default Session)
+        self.enter_extended_session()
+        return max_ok
+
+    @staticmethod
+    def _line_has_can_data(line):
+        """Check if a response line contains hex CAN data (e.g. '7E8 06 50 ...')."""
+        parts = line.strip().split()
+        if len(parts) < 2:
+            return False
+        try:
+            int(parts[0], 16)
+            int(parts[1], 16)
+            return True
+        except ValueError:
+            return False
+
+    def _test_atcaf0(self):
+        """Test if ATCAF0 can actually send CAN data.
+        Returns: 'ok', 'sent_no_resp', 'rejected', or 'error'."""
+        self.elm.cmd("ATCAF0")
+        time.sleep(0.1)
+
+        # Send DiagSession Extended as raw CAN:
+        # PCI(02) SID(10) Sub(03) Pad(FF x5) = 8 bytes
+        lines = self.elm.cmd("02 10 03 FF FF FF FF FF", timeout=3)
+        self.elm.cmd("ATCAF1")
+
+        for line in lines:
+            upper = line.strip().upper()
+            if upper == "?":
+                return 'rejected'
+            if "NO DATA" in upper:
+                return 'sent_no_resp'
+            if "CAN ERROR" in upper:
+                return 'error'
+            # Any response with hex data = success
+            parts = line.split()
+            if len(parts) >= 3:
+                try:
+                    int(parts[0], 16)
+                    return 'ok'
+                except ValueError:
+                    continue
+        return 'sent_no_resp'  # no clear error = probably sent
+
+    def _build_raw_iocontrol(self, did, ctrl_param, state):
+        """Build 8-byte raw CAN data for IOControlByIdentifier.
+        Returns hex string like '06 2F 02 3F 03 00 01 FF'."""
+        did_h = (did >> 8) & 0xFF
+        did_l = did & 0xFF
+        # UDS payload: SID(2F) DID_H DID_L CtrlParam State[0] State[1]
+        uds = [0x2F, did_h, did_l, ctrl_param] + list(state)
+        pci = len(uds)  # SF PCI = length
+        raw = [pci] + uds
+        # Pad to 8 bytes
+        while len(raw) < 8:
+            raw.append(0xFF)
+        return " ".join(f"{b:02X}" for b in raw[:8])
+
+    def io_control_raw(self, did, state, label=""):
+        """IOControlByIdentifier via ATCAF0 raw CAN mode.
+        Enters ATCAF0, sends raw frame, restores ATCAF1."""
+        raw_hex = self._build_raw_iocontrol(did, 0x03, state)
+        desc = label or f"IOControl DID=0x{did:04X} (raw)"
+
+        self.elm.cmd("ATCAF0")
+        time.sleep(0.05)
+        ok, can_id, resp = self.send_uds(raw_hex, desc)
+
+        # If NO DATA, try without any receive filter
+        if not ok and isinstance(resp, str) and "NO DATA" in resp.upper():
+            if self.elm.verbose:
+                print("  -> NO DATA, retrying with ATAR (no filter)...")
+            self.elm.cmd("ATAR")
+            ok, can_id, resp = self.send_uds(raw_hex, f"{desc} (ATAR)")
+            # Restore ATCRA if it was set
+            if self._atcra_set:
+                self.elm.cmd("ATCRA 765")
+
+        self.elm.cmd("ATCAF1")
+        return ok, resp
+
+    def io_control_stpx(self, did, state, label=""):
+        """IOControlByIdentifier via STN1110 STPX command."""
+        did_h = (did >> 8) & 0xFF
+        did_l = did & 0xFF
+        uds = [0x2F, did_h, did_l, 0x03] + list(state)
+        pci = len(uds)
+        raw = [pci] + uds
+        while len(raw) < 8:
+            raw.append(0xFF)
+        data_hex = "".join(f"{b:02X}" for b in raw[:8])
+
+        desc = label or f"IOControl DID=0x{did:04X} (STPX)"
+        if self.elm.verbose:
+            print(f"\n  [{desc}]")
+
+        lines = self.elm.cmd(f"STPX H:745, D:{data_hex}, R:1", timeout=5)
+
+        for line in lines:
+            upper = line.strip().upper()
+            if upper == "?":
+                if self.elm.verbose:
+                    print("  !! STPX not supported")
+                return False, "STPX_NOT_SUPPORTED"
+            if "NO DATA" in upper:
+                return False, "NO DATA"
+
+        can_id, payload, error = self._parse_response(lines)
+        if error:
+            return False, error
+        if payload and payload[0] == 0x7F:
+            nrc = payload[2] if len(payload) >= 3 else 0
+            return False, payload
+        return True, payload
+
+    def unlock_raw(self):
+        """Unlock door using ATCAF0 raw CAN mode.
+
+        Strategy: ExtendedSession via ATCAF1 (2 bytes, works on clone),
+        then ATCAF0 for raw 8-byte IOControl frame."""
+        print("\n--- Unlock via ATCAF0 Raw CAN ---")
+
+        if not self.enter_extended_session():
+            time.sleep(0.5)
+            if not self.enter_extended_session():
+                print("  !! Cannot enter extended session")
+                return False
+        self.tester_present()
+
+        ok, resp = self.io_control_raw(0x023F, [0x00, 0x01],
+                                       "UNLOCK (DID=0x023F [00 01] raw)")
+
+        # Return control to ECU (raw)
+        self.io_control_raw(0x023F, [0x00, 0x00], "Return Control (raw)")
+
+        # Restore and cleanup
+        self.return_default_session()
+
+        if ok:
+            print("  UNLOCK raw: OK")
+        else:
+            print(f"  UNLOCK raw: response={resp}")
+            print("  (listen for door click -- frame may have been sent)")
+        print("---")
+        return ok
+
+    def lock_raw(self):
+        """Lock door using ATCAF0 raw CAN mode."""
+        print("\n--- Lock via ATCAF0 Raw CAN ---")
+
+        if not self.enter_extended_session():
+            time.sleep(0.5)
+            if not self.enter_extended_session():
+                print("  !! Cannot enter extended session")
+                return False
+        self.tester_present()
+
+        ok, resp = self.io_control_raw(0x023F, [0x00, 0x02],
+                                       "LOCK (DID=0x023F [00 02] raw)")
+
+        self.io_control_raw(0x023F, [0x00, 0x00], "Return Control (raw)")
+        self.return_default_session()
+
+        if ok:
+            print("  LOCK raw: OK")
+        else:
+            print(f"  LOCK raw: response={resp}")
+            print("  (listen for door click -- frame may have been sent)")
+        print("---")
+        return ok
+
+    def unlock_stpx(self):
+        """Unlock door using STN1110 STPX command."""
+        print("\n--- Unlock via STPX (STN1110) ---")
+
+        if not self.enter_extended_session():
+            print("  !! Cannot enter extended session")
+            return False
+        self.tester_present()
+
+        ok, resp = self.io_control_stpx(0x023F, [0x00, 0x01],
+                                        "UNLOCK (STPX)")
+        self.io_control_stpx(0x023F, [0x00, 0x00], "Return Control (STPX)")
+        self.return_default_session()
+
+        print(f"  STPX unlock: {'OK' if ok else resp}")
+        print("---")
+        return ok
+
+    def lock_stpx(self):
+        """Lock door using STN1110 STPX command."""
+        print("\n--- Lock via STPX (STN1110) ---")
+
+        if not self.enter_extended_session():
+            print("  !! Cannot enter extended session")
+            return False
+        self.tester_present()
+
+        ok, resp = self.io_control_stpx(0x023F, [0x00, 0x02],
+                                        "LOCK (STPX)")
+        self.io_control_stpx(0x023F, [0x00, 0x00], "Return Control (STPX)")
+        self.return_default_session()
+
+        print(f"  STPX lock: {'OK' if ok else resp}")
+        print("---")
+        return ok
+
 
 # ============================================================================
 # Door Lock / DRL Constants
@@ -394,51 +736,107 @@ DRL_OFF     = [0x00, 0x00]   # inferred — needs live test
 # Commands
 # ============================================================================
 
+def _do_standard_io(bcm, did, state, label):
+    """Standard ATCAF1 IOControl — returns True/False/'payload_blocked'."""
+    if not bcm.enter_extended_session():
+        time.sleep(0.5)
+        if not bcm.enter_extended_session():
+            print("  !! Cannot enter extended session")
+            return False
+    bcm.tester_present()
+
+    ok = bcm.io_control(did, state, label)
+
+    # Detect if clone blocked the payload (io_control returns False,
+    # and the ELM returned '?' for the 6-byte command)
+    if not ok and bcm._method is None:
+        # The command might have been blocked by payload limit.
+        # We can't tell for sure here, but if we haven't probed yet,
+        # we'll try fallback methods.
+        bcm.io_control(did, RETURN_ECU, "Return control to ECU")
+        bcm.return_default_session()
+        return 'maybe_blocked'
+
+    bcm.io_control(did, RETURN_ECU, "Return control to ECU")
+    bcm.return_default_session()
+    return ok
+
+
 def do_unlock(bcm):
     print("=" * 50)
     print("  DOOR UNLOCK")
     print("=" * 50)
 
-    if not bcm.enter_extended_session():
-        print("  Retrying session...")
-        time.sleep(0.5)
-        if not bcm.enter_extended_session():
-            print("  !! Cannot enter extended session")
-            return False
+    method = bcm._method
 
-    bcm.tester_present()
+    ok = False
 
-    ok = bcm.io_control(DID_DOOR, UNLOCK, "Unlock (DID=0x023F [00 01])")
+    # Method 1: Standard ATCAF1 (if known to work or first try)
+    if method in (None, 'standard'):
+        print("  Trying standard ATCAF1...")
+        result = _do_standard_io(bcm, DID_DOOR, UNLOCK,
+                                 "Unlock (DID=0x023F [00 01])")
+        if result is True:
+            ok = True
+            bcm._method = 'standard'
+        elif result == 'maybe_blocked' and method is None:
+            print("  Standard method failed, trying alternatives...")
 
-    bcm.io_control(DID_DOOR, RETURN_ECU, "Return control to ECU")
-    bcm.return_default_session()
+    # Method 2: ATCAF0 raw CAN
+    if not ok and method in (None, 'atcaf0', 'maybe_blocked'):
+        print("  Trying ATCAF0 raw CAN mode...")
+        ok = bcm.unlock_raw()
+        if ok:
+            bcm._method = 'atcaf0'
+
+    # Method 3: STN1110 STPX
+    if not ok and method in (None, 'stpx'):
+        print("  Trying STPX (STN1110)...")
+        ok = bcm.unlock_stpx()
+        if ok:
+            bcm._method = 'stpx'
 
     print("=" * 50)
-    print(f"  {'OK' if ok else 'FAILED'}")
+    print(f"  UNLOCK: {'OK' if ok else 'FAILED'}")
+    if not ok:
+        print("  TIP: Run [8] Probe to diagnose adapter capabilities")
+        print("       Listen for door click even if response says FAILED")
     print("=" * 50)
     return ok
 
 
 def do_lock(bcm):
     print("=" * 50)
-    print("  DOOR LOCK  (inferred — first test!)")
+    print("  DOOR LOCK")
     print("=" * 50)
 
-    if not bcm.enter_extended_session():
-        time.sleep(0.5)
-        if not bcm.enter_extended_session():
-            print("  !! Cannot enter extended session")
-            return False
+    method = bcm._method
+    ok = False
 
-    bcm.tester_present()
+    if method in (None, 'standard'):
+        print("  Trying standard ATCAF1...")
+        result = _do_standard_io(bcm, DID_DOOR, LOCK,
+                                 "Lock (DID=0x023F [00 02])")
+        if result is True:
+            ok = True
+            bcm._method = 'standard'
 
-    ok = bcm.io_control(DID_DOOR, LOCK, "Lock (DID=0x023F [00 02])")
+    if not ok and method in (None, 'atcaf0', 'maybe_blocked'):
+        print("  Trying ATCAF0 raw CAN mode...")
+        ok = bcm.lock_raw()
+        if ok:
+            bcm._method = 'atcaf0'
 
-    bcm.io_control(DID_DOOR, RETURN_ECU, "Return control to ECU")
-    bcm.return_default_session()
+    if not ok and method in (None, 'stpx'):
+        print("  Trying STPX (STN1110)...")
+        ok = bcm.lock_stpx()
+        if ok:
+            bcm._method = 'stpx'
 
     print("=" * 50)
-    print(f"  {'OK' if ok else 'FAILED'}")
+    print(f"  LOCK: {'OK' if ok else 'FAILED'}")
+    if not ok:
+        print("  TIP: Run [8] Probe to diagnose adapter capabilities")
     print("=" * 50)
     return ok
 
@@ -480,6 +878,12 @@ def do_status(bcm):
     print("=== DONE ===")
 
 
+def do_probe(bcm):
+    """Probe adapter capabilities and recommend best method."""
+    info = bcm.probe()
+    return info.get('max_payload', 0) >= 6 or info.get('atcaf0') in ('ok', 'sent_no_resp')
+
+
 # ============================================================================
 # Interactive Mode
 # ============================================================================
@@ -492,11 +896,14 @@ def interactive(bcm):
     print("=" * 50)
 
     while True:
+        method_str = f" [{bcm._method or 'auto'}]" if bcm._method else ""
         print()
+        print(f"  --- Door Lock{method_str} ---")
         print("  [1] Unlock door        [5] Read status")
         print("  [2] Lock door          [6] Raw AT command")
         print("  [3] DRL on             [7] Raw UDS hex")
-        print("  [4] DRL off            [q] Quit")
+        print("  [4] DRL off            [8] Probe adapter")
+        print("                         [q] Quit")
         print()
 
         try:
@@ -528,6 +935,8 @@ def interactive(bcm):
                     bcm.send_uds(cmd, "Raw UDS")
             except (EOFError, KeyboardInterrupt):
                 pass
+        elif choice == "8":
+            do_probe(bcm)
         elif choice in ("q", "quit", "exit"):
             break
 
@@ -548,16 +957,23 @@ connection (pick one):
   --serial PORT       ESP32-C3 USB bridge (e.g. COM4)
 
 commands (--cmd):
-  unlock    Unlock doors
-  lock      Lock doors (inferred — test carefully!)
+  unlock    Unlock doors (auto-detects best method)
+  lock      Lock doors (auto-detects best method)
   drl-on    DRL on
   drl-off   DRL off (inferred)
   status    Battery voltage + RPM + speed
+  probe     Detect adapter capabilities and payload limits
+
+auto-fallback for ELM327 v1.5 clone (4-byte payload limit):
+  1. Standard ATCAF1  (works if payload <= 4 bytes)
+  2. ATCAF0 raw CAN   (bypass limit with raw 8-byte frames)
+  3. STN1110 STPX     (if clone is STN1110-based)
 
 examples:
   python nissan_door_elm327.py --tcp 192.168.0.10:35000
   python nissan_door_elm327.py --serial COM4
   python nissan_door_elm327.py --serial COM4 --cmd unlock
+  python nissan_door_elm327.py --serial COM4 --cmd probe
   python nissan_door_elm327.py --tcp 192.168.0.10:35000 --cmd status
 """)
     parser.add_argument("--tcp", metavar="HOST:PORT",
@@ -567,7 +983,8 @@ examples:
     parser.add_argument("--baud", type=int, default=115200,
                         help="Serial baud rate (default: 115200)")
     parser.add_argument("--cmd",
-                        choices=["unlock", "lock", "drl-on", "drl-off", "status"],
+                        choices=["unlock", "lock", "drl-on", "drl-off",
+                                 "status", "probe"],
                         help="Single-shot command (omit for interactive)")
     parser.add_argument("-q", "--quiet", action="store_true",
                         help="Suppress verbose output")
@@ -607,11 +1024,12 @@ examples:
 
         if args.cmd:
             cmds = {
-                "unlock": do_unlock,
-                "lock":   do_lock,
-                "drl-on": do_drl_on,
+                "unlock":  do_unlock,
+                "lock":    do_lock,
+                "drl-on":  do_drl_on,
                 "drl-off": do_drl_off,
-                "status": do_status,
+                "status":  do_status,
+                "probe":   do_probe,
             }
             ok = cmds[args.cmd](bcm)
             sys.exit(0 if ok else 1)
