@@ -1,5 +1,20 @@
 # Nissan Almera Turbo (N18) / Versa — Door Lock Reverse Engineering
 
+> **โปรเจคนี้ออกจาก reverse engineering ไปเป็น firmware ที่ใช้งานจริงแล้ว**
+>
+> ดูสถานะปัจจุบัน + วิธีต่อ Android HUD:
+>
+> - 📘 **[HUD_PROTOCOL.md](HUD_PROTOCOL.md)** — Android integration spec (TCP/JSON, all fields, all commands)
+> - 🧠 **[STATE_MACHINE.md](STATE_MACHINE.md)** — 8-state driving machine, scenario by scenario
+> - 🛠️ **[FIRMWARE_PLAN.md](FIRMWARE_PLAN.md)** — implementation phases (all 6 done)
+> - 🔬 **[DECODED_DIDS.md](DECODED_DIDS.md)** — verified byte mappings
+>
+> Firmware source: [`firmware/src/`](firmware/src/) — ESP32-C3 + PlatformIO
+>
+> Everything below is the original reverse-engineering writeup that got us here.
+
+---
+
 ## สารบัญ
 
 1. [ภาพรวมโปรเจค](#1-ภาพรวมโปรเจค)

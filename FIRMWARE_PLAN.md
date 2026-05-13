@@ -225,32 +225,49 @@ lib_deps =
 
 ---
 
-## Implementation Phases
+## Implementation Status — ทุก Phase ทำงานบนรถจริง ✅
 
-### Phase 1: CAN Core + Decode ← เริ่มที่นี่
-- `main.cpp`, `config.h`, `can_manager`, `decode`, `car_state`
-- อ่าน PIDs + DIDs print ผ่าน Serial Monitor
-- **เป้าหมาย: flash แล้วเสียบ USB ดูข้อมูลรถผ่าน Serial**
+### Phase 1: CAN Core + Decode ✅
+- `config.h`, `can_manager.{h,cpp}`, `decode.{h,cpp}`, `car_state.{h,cpp}`
+- TWAI driver, ISO-TP multiframe, UDS read/write, NRC 0x78 handling
+- OBD-II Mode 01 + manufacturer DIDs
 
-### Phase 2: Session Manager + Poll Task
-- `session_manager`, `poll_task`
-- Polling schedule + command queue
-- ทดสอบ lock/unlock/DRL ผ่าน Serial command
+### Phase 2: Tasks + Command Queue ✅
+- `poll_task.{h,cpp}` — canPoll FreeRTOS task (sole bus owner)
+- `cmd_queue.{h,cpp}` — lock / unlock / DRL / refresh / dump / scan
+- `serial_cmd.{h,cpp}` — ~12 text commands + JSON parser
+- Mutex-protected car_state, DRL TesterPresent keep-alive
 
-### Phase 3: NVS Config
-- `nvs_config`
-- WiFi credentials + feature flags
+### Phase 3: NVS Config ✅
+- `nvs_config.{h,cpp}` — 10 fields persistent in NVS
+- WiFi creds, auto-feature toggles, thresholds
 
-### Phase 4: WiFi + TCP + JSON
-- `wifi_task`, `json_protocol`
-- เชื่อม Android HUD จริง
+### Phase 4: WiFi + TCP + JSON ✅
+- `wifi_task.{h,cpp}` — STA → mobile hotspot, TCP client to HUD
+- `json_protocol.{h,cpp}` — hello/status/ack messages + command parser
+- Auto-reconnect with exponential backoff
 
-### Phase 5: Auto-Features
-- `auto_features` state machine
-- ทดสอบบนรถจริง
+### Phase 5: Auto-Features (State Machine) ✅
+- Integrated into `poll_task.cpp` (not a separate file)
+- 8 states: ACC_ON → ENGINE_ON → DRIVING → LOCKED_CRUISING → LOCKED_STOPPED → REARM → ENGINE_OFF → PARKED
+- Auto-lock at speed, auto-unlock 1s after engine off (gear=P), DRL on engine
+- **Idle stop awareness**: RPM=0 + gear≠P does NOT trigger unlock
+- **Circular locking**: door open→close while LOCKED_STOPPED → REARM → re-lock at speed
+- **Restart cancel**: engine restart within unlock countdown cancels unlock
 
-### Phase 6: Integration + Hardening
-- End-to-end test, error recovery, memory profiling
+### Phase 6: Hardening ✅
+- **Tier 2 low-power**: PARKED >30s → WiFi off + RPM ping every 30s
+  (~70% current draw reduction without going to deep sleep)
+- **No-response fallback**: 60s without successful poll → low-power even outside PARKED
+- **Last-known gear**: engine ECU goes silent at shutdown; we keep the last good gear so unlock still fires
+- **Auto-unlock latency**: cut from ~7s → ~1.5s via UDS-timeout drop, gear-skip-when-RPM=0, faster RPM poll
+
+### Bonus
+- **Web config portal** (`config_portal.{h,cpp}`) — long-press BOOT, AP + form
+- **Live debug page** at `/debug` with `/api/status` and `/api/health` JSON endpoints
+- **Button task** (`button_task.{h,cpp}`) — BOOT long-press detection
+
+For the Android integration spec see [HUD_PROTOCOL.md](HUD_PROTOCOL.md).
 
 ---
 
