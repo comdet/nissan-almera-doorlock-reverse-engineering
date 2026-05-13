@@ -463,6 +463,43 @@ static void execCmd(const Cmd& c) {
         case CMD_REFRESH:
             refresh_pending = true;
             break;
+        case CMD_DUMP: {
+            // Read every known DID and dump raw hex to Serial — handy for
+            // hunting down which byte changes when toggling features like
+            // idle stop. Runs on the CAN-poll task so the bus stays safe.
+            static const struct {
+                const char*  label;
+                uint32_t     req;
+                uint32_t     resp;
+                uint16_t     did;
+            } DIDS[] = {
+                { "BCM 0x0109   ", BCM_REQ,   BCM_RESP,   DID_DOOR_BODY  },
+                { "Light 0x0E07 ", LIGHT_REQ, LIGHT_RESP, DID_HANDBRAKE  },
+                { "Engine 0x1301", ENG_REQ,   ENG_RESP,   DID_GEAR       },
+                { "Engine 0x1304", ENG_REQ,   ENG_RESP,   DID_ENGINE_RUN },
+            };
+            Serial.println();
+            Serial.println("====== DID DUMP (raw bytes) ======");
+            Serial.printf("[t=%lu ms]\n", millis());
+            for (auto& d : DIDS) {
+                uint8_t buf[64];
+                size_t n = can_mgr::udsReadDid(d.req, d.resp, d.did, buf, sizeof(buf));
+                Serial.printf("%s len=%2u:", d.label, (unsigned)n);
+                if (n == 0) {
+                    Serial.print(" (no response)");
+                } else {
+                    for (size_t i = 0; i < n; i++) Serial.printf(" %02X", buf[i]);
+                    // Also show index ruler for the first DID to make diffing easy
+                    Serial.println();
+                    Serial.print("              idx:");
+                    for (size_t i = 0; i < n; i++) Serial.printf(" %02u", (unsigned)i);
+                }
+                Serial.println();
+            }
+            Serial.println("====== END DUMP ======");
+            Serial.println();
+            break;
+        }
         default:
             break;
     }

@@ -65,7 +65,7 @@ void printSnapshotText() {
 void printHelp() {
     Serial.println();
     Serial.println("-- commands --");
-    Serial.println("  lock | unlock | drl on | drl off | refresh");
+    Serial.println("  lock | unlock | drl on | drl off | refresh | dump");
     Serial.println("  status              show car snapshot");
     Serial.println("  config              show config");
     Serial.println("  config <key> <val>  set: auto_lock/auto_unlock/auto_drl (true|false),");
@@ -169,6 +169,7 @@ static void dispatch(char* line) {
     if (!strcmp(cmd, "lock"))      { cmd_queue::push(CMD_LOCK,    SRC_SERIAL); Serial.println("[cmd] lock queued"); }
     else if (!strcmp(cmd, "unlock"))  { cmd_queue::push(CMD_UNLOCK,  SRC_SERIAL); Serial.println("[cmd] unlock queued"); }
     else if (!strcmp(cmd, "refresh")) { cmd_queue::push(CMD_REFRESH, SRC_SERIAL); Serial.println("[cmd] refresh queued"); }
+    else if (!strcmp(cmd, "dump"))    { cmd_queue::push(CMD_DUMP,    SRC_SERIAL); Serial.println("[cmd] dump queued"); }
     else if (!strcmp(cmd, "drl")) {
         if (!strcmp(arg, "on"))       { cmd_queue::push(CMD_DRL_ON,  SRC_SERIAL); Serial.println("[cmd] drl on queued"); }
         else if (!strcmp(arg, "off")) { cmd_queue::push(CMD_DRL_OFF, SRC_SERIAL); Serial.println("[cmd] drl off queued"); }
