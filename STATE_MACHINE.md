@@ -59,7 +59,7 @@ OBD port ของรถรุ่นนี้ต่อผ่าน **CAN Gateway
 **สถานการณ์:** รถเริ่มเคลื่อนที่ ขับในซอย ยังไม่ถึงความเร็วที่จะล็อค (< 20 km/h)
 
 **ทำอะไร:**
-- Poll HUD ทุก 500ms — RPM, Speed, Throttle, คันเร่ง
+- Poll HUD ทุก 1 วินาที — RPM, Speed, Throttle, คันเร่ง
 - Poll BCM ทุก 2 วินาที — ไฟเลี้ยว, ไฟหน้า, ไฟสูง, เบรค
 - Poll Coolant + Battery ทุก 3 วินาที
 
@@ -76,7 +76,7 @@ OBD port ของรถรุ่นนี้ต่อผ่าน **CAN Gateway
 **สถานการณ์:** ขับบนถนนใหญ่ ความเร็ว >= 20 km/h ประตูล็อคแล้ว
 
 **ทำอะไร:**
-- Poll HUD ทุก 500ms — RPM, Speed, Throttle, คันเร่ง
+- Poll HUD ทุก 1 วินาที — RPM, Speed, Throttle, คันเร่ง
 - Poll BCM ทุก 2 วินาที — ไฟเลี้ยว, ไฟหน้า, ไฟสูง, เบรค (แสดง HUD)
 - Poll Coolant + Battery ทุก 3 วินาที
 - Poll MIL + Catalyst + Ambient ทุก 15 วินาที
@@ -252,10 +252,10 @@ OBD port ของรถรุ่นนี้ต่อผ่าน **CAN Gateway
 
 | PID | ข้อมูล | ACC_ON | ENGINE_ON | DRIVING | LOCKED วิ่ง | LOCKED จอด | REARM | ENGINE_OFF | PARKED |
 |---|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| 0x0C | RPM | /2s | /1s | /500ms | /500ms | /1s | /1s | /1s | - |
-| 0x0D | Speed | - | /1s | /500ms | /500ms | /1s | /1s | - | - |
-| 0x11 | Throttle | - | /1s | /500ms | /500ms | /1s | /1s | - | - |
-| 0x49 | คันเร่ง | - | /1s | /500ms | /500ms | /1s | /1s | - | - |
+| 0x0C | RPM | /2s | /1s | /1s | /1s | /1s | /1s | /1s | - |
+| 0x0D | Speed | - | /1s | /1s | /1s | /1s | /1s | - | - |
+| 0x11 | Throttle | - | /1s | /1s | /1s | /1s | /1s | - | - |
+| 0x49 | คันเร่ง | - | /1s | /1s | /1s | /1s | /1s | - | - |
 | 0x04 | Engine Load | - | /5s | /3s | /3s | - | - | - | - |
 | 0x05 | Coolant | - | /5s | /3s | /3s | - | - | - | - |
 | 0x42 | Battery | /2s | /5s | /3s | /3s | - | - | - | - |

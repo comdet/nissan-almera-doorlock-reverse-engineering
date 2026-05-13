@@ -122,7 +122,7 @@ CarState (mutex-protected struct)
 
 Polling rate depends on driving state, not a fixed schedule. Summary:
 
-**Fast (HUD, ทุก 500ms while driving):** RPM, Speed, Throttle
+**Fast (HUD, ทุก 1s while driving):** RPM, Speed, Throttle
 **Medium (ทุก 2-3s):** DID 0x0109 (doors/lock/lights — free during DRL session)
 **Slow (ทุก 5-15s):** Coolant, Battery, Ambient, MIL, DID 0x0E07 (handbrake), DID 0x1301 (gear), DID 0x1304 (engine)
 **DRL keep-alive:** TesterPresent to BCM ทุก 1.2s เมื่อ DRL active

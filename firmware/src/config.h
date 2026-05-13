@@ -91,7 +91,7 @@ static const uint32_t POLL_ENGON_HBRK_MS = 5000;
 static const uint32_t POLL_ENGON_ENG_MS  = 10000;
 
 // DRIVING / LOCKED_CRUISING: full HUD data
-static const uint32_t POLL_DRV_FAST_MS  = 500;
+static const uint32_t POLL_DRV_FAST_MS  = 1000;
 static const uint32_t POLL_DRV_MED_MS   = 3000;
 static const uint32_t POLL_DRV_SLOW_MS  = 15000;
 static const uint32_t POLL_DRV_BCM_MS   = 2000;
