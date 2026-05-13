@@ -98,7 +98,10 @@ static const uint32_t POLL_DRV_BCM_MS   = 2000;
 static const uint32_t POLL_DRV_GEAR_MS  = 10000;  // keep fresh — avoid stale "?" if a stall pushes us to ENGINE_OFF check
 
 // LOCKED_STOPPED / REARM: watching doors + idle stop
-static const uint32_t POLL_STOP_FAST_MS = 1000;
+// Fast poll 500ms so we catch RPM→0 within half a second — the rest of
+// the unlock pipeline (state transition + countdown) is bottlenecked on
+// this, so faster here = faster auto-unlock.
+static const uint32_t POLL_STOP_FAST_MS = 500;
 static const uint32_t POLL_STOP_BCM_MS  = 2000;
 static const uint32_t POLL_STOP_GEAR_MS = 3000;
 

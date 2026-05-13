@@ -424,7 +424,17 @@ static void pollForState() {
         // Stopped — watch RPM/Speed + doors (for circular lock) + gear (idle stop check)
         if (due(&last_fast, POLL_STOP_FAST_MS)) { pollRPM(); pollSpeed(); }
         if (due(&last_bcm,  POLL_STOP_BCM_MS))    pollBCM();
-        if (due(&last_gear, POLL_STOP_GEAR_MS))   pollGear();
+        // Skip gear poll when RPM=0: engine ECU will be silent and the read
+        // will burn ~1.5s timeout for nothing. car_state.gear keeps its last
+        // value (which is what isRealEngineOff() reads) so the state-machine
+        // transition fires immediately. While idle-stop is active the ECU
+        // stays alive, so it still responds; only true engine-off triggers
+        // the skip.
+        if (due(&last_gear, POLL_STOP_GEAR_MS)) {
+            car_state::Guard g(50);
+            bool rpm_zero = g.ok() && (car_state::state.rpm == 0);
+            if (!rpm_zero) pollGear();
+        }
         break;
 
     case DrvState::ENGINE_OFF:
