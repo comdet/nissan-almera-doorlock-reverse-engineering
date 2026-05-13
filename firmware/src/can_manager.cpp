@@ -87,9 +87,13 @@ bool udsSetSession(uint32_t req_id, uint32_t resp_id, uint8_t session) {
 
 size_t udsReadDid(uint32_t req_id, uint32_t resp_id, uint16_t did,
                   uint8_t* out, size_t max_len) {
-    if (!udsSetSession(req_id, resp_id, SESSION_EXTENDED)) {
-        return 0;
-    }
+    // Try ExtendedSession but continue even on failure — some ECUs (notably
+    // engine ECU 0x7E1 on this car) reject the session-control request yet
+    // still respond to ReadDataByIdentifier (which is freely accessible for
+    // many DIDs in default session). Python helper script worked because it
+    // discarded the session-control response without checking, so the same
+    // sequence reaches ReadDID regardless.
+    udsSetSession(req_id, resp_id, SESSION_EXTENDED);
 
     // Tiny gap between session response and the read request — matches Python timing.
     delay(INTER_FRAME_MS);
