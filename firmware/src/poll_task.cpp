@@ -344,6 +344,7 @@ static void pollForState() {
         if (due(&last_med,  POLL_DRV_MED_MS))  { pollCoolant(); pollBattery(); }
         if (due(&last_slow, POLL_DRV_SLOW_MS)) { pollAmbient(); pollMil(); }
         if (due(&last_bcm,  POLL_DRV_BCM_MS))    pollBCM();
+        if (due(&last_gear, POLL_DRV_GEAR_MS))   pollGear();  // keep fresh for ENGINE_OFF check
         break;
 
     case DrvState::LOCKED_STOPPED:

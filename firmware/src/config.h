@@ -95,6 +95,7 @@ static const uint32_t POLL_DRV_FAST_MS  = 1000;
 static const uint32_t POLL_DRV_MED_MS   = 3000;
 static const uint32_t POLL_DRV_SLOW_MS  = 15000;
 static const uint32_t POLL_DRV_BCM_MS   = 2000;
+static const uint32_t POLL_DRV_GEAR_MS  = 10000;  // keep fresh — avoid stale "?" if a stall pushes us to ENGINE_OFF check
 
 // LOCKED_STOPPED / REARM: watching doors + idle stop
 static const uint32_t POLL_STOP_FAST_MS = 1000;
