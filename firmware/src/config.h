@@ -102,8 +102,8 @@ static const uint32_t POLL_STOP_FAST_MS = 1000;
 static const uint32_t POLL_STOP_BCM_MS  = 2000;
 static const uint32_t POLL_STOP_GEAR_MS = 3000;
 
-// ENGINE_OFF: countdown
-static const uint32_t POLL_OFF_RPM_MS   = 1000;
+// ENGINE_OFF: countdown — keep this short so restart-cancel is responsive
+static const uint32_t POLL_OFF_RPM_MS   = 500;
 
 // PARKED: safety check (only during first LOWPOWER_DELAY_MS), then low-power
 static const uint32_t POLL_PARK_BCM_MS    = 5000;
@@ -129,5 +129,11 @@ static const uint32_t PRINT_MS = 2000;
 
 // ---------------- UDS timing ----------------
 static const uint32_t TIMEOUT_FRAME_MS    = 800;
-static const uint32_t TIMEOUT_PENDING_MS  = 5000;
+// Used to be 5000 to accommodate DID 0x0108's NRC 0x78 ~3s delay. We dropped
+// that DID (gear is now read via single-frame 0x1301) so every DID we touch
+// answers under 500ms when alive. Lower timeout means the canPoll task
+// recovers in 1.5s instead of 5s when the engine ECU goes silent at shutdown
+// — that 3.5s saving is the difference between auto-unlock feeling instant
+// vs feeling laggy.
+static const uint32_t TIMEOUT_PENDING_MS  = 1500;
 static const uint32_t INTER_FRAME_MS      = 30;

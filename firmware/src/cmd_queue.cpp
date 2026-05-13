@@ -28,6 +28,7 @@ const char* typeLabel(CmdType t) {
         case CMD_DRL_OFF: return "drl_off";
         case CMD_REFRESH: return "refresh";
         case CMD_DUMP:    return "dump";
+        case CMD_SCAN:    return "scan";
         default:          return "none";
     }
 }

@@ -33,4 +33,8 @@ const char* getStateName();
 // (wifi_task) should suspend themselves while this is true.
 bool isLowPower();
 
+// Set the parameters for the next CMD_SCAN. Call this from a comms task,
+// then push CMD_SCAN to the queue — canPoll will pick it up and run.
+void setScanRange(uint32_t req_id, uint32_t resp_id, uint16_t did_start, uint16_t did_end);
+
 }  // namespace poll_task

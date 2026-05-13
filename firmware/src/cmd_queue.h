@@ -17,6 +17,7 @@ enum CmdType : uint8_t {
     CMD_DRL_OFF,
     CMD_REFRESH,   // re-poll all DIDs/PIDs immediately
     CMD_DUMP,      // read every known DID and print raw bytes to Serial (debug)
+    CMD_SCAN,      // scan a DID range on one ECU (debug — params set externally)
 };
 
 enum CmdSource : uint8_t {

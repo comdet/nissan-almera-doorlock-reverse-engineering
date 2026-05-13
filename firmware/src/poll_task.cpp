@@ -109,6 +109,19 @@ static uint32_t engine_off_at = 0;
 // Track whether we have a "refresh now" pending — bumps all timers due.
 static volatile bool refresh_pending = false;
 
+// CMD_SCAN parameters (set from comms task, consumed by canPoll).
+static uint32_t scan_req   = 0;
+static uint32_t scan_resp  = 0;
+static uint16_t scan_start = 0;
+static uint16_t scan_end   = 0;
+
+void setScanRange(uint32_t req_id, uint32_t resp_id, uint16_t did_start, uint16_t did_end) {
+    scan_req   = req_id;
+    scan_resp  = resp_id;
+    scan_start = did_start;
+    scan_end   = did_end;
+}
+
 // ============================================================================
 // Polling primitives — each writes into car_state under the mutex
 // ============================================================================
@@ -497,6 +510,36 @@ static void execCmd(const Cmd& c) {
                 Serial.println();
             }
             Serial.println("====== END DUMP ======");
+            Serial.println();
+            break;
+        }
+        case CMD_SCAN: {
+            // Scan a DID range on one ECU. Prints every DID that responds
+            // with positive data. Useful for hunting unknown features.
+            // Skips silently when ECU returns no data (timeout / not supported).
+            if (scan_start == 0 && scan_end == 0) {
+                Serial.println("[scan] no range set");
+                break;
+            }
+            Serial.println();
+            Serial.printf("====== DID SCAN  ECU req=0x%03lX resp=0x%03lX  DID 0x%04X..0x%04X ======\n",
+                          (unsigned long)scan_req, (unsigned long)scan_resp, scan_start, scan_end);
+            uint32_t t0 = millis();
+            uint32_t found = 0;
+            for (uint32_t did = scan_start; did <= scan_end; did++) {
+                uint8_t buf[64];
+                size_t n = can_mgr::udsReadDid(scan_req, scan_resp, (uint16_t)did, buf, sizeof(buf));
+                if (n > 0) {
+                    found++;
+                    Serial.printf("  0x%04X (%2u):", (unsigned)did, (unsigned)n);
+                    for (size_t i = 0; i < n; i++) Serial.printf(" %02X", buf[i]);
+                    Serial.println();
+                }
+                // brief yield so DRL keep-alive can still fire
+                vTaskDelay(pdMS_TO_TICKS(5));
+            }
+            Serial.printf("====== END SCAN (%lu found, %lu ms) ======\n",
+                          found, millis() - t0);
             Serial.println();
             break;
         }

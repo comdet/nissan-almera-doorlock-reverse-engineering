@@ -66,6 +66,8 @@ void printHelp() {
     Serial.println();
     Serial.println("-- commands --");
     Serial.println("  lock | unlock | drl on | drl off | refresh | dump");
+    Serial.println("  scan <bcm|light|engine> <start_hex> <end_hex>");
+    Serial.println("    e.g. scan engine 1300 130F  — probe DID range for unknown features");
     Serial.println("  status              show car snapshot");
     Serial.println("  config              show config");
     Serial.println("  config <key> <val>  set: auto_lock/auto_unlock/auto_drl (true|false),");
@@ -170,6 +172,37 @@ static void dispatch(char* line) {
     else if (!strcmp(cmd, "unlock"))  { cmd_queue::push(CMD_UNLOCK,  SRC_SERIAL); Serial.println("[cmd] unlock queued"); }
     else if (!strcmp(cmd, "refresh")) { cmd_queue::push(CMD_REFRESH, SRC_SERIAL); Serial.println("[cmd] refresh queued"); }
     else if (!strcmp(cmd, "dump"))    { cmd_queue::push(CMD_DUMP,    SRC_SERIAL); Serial.println("[cmd] dump queued"); }
+    else if (!strcmp(cmd, "scan")) {
+        // scan <ecu> <start_hex> <end_hex>     ecu = bcm|light|engine
+        char* ecu_s = arg;
+        char* rest  = arg;
+        while (*rest && *rest != ' ' && *rest != '\t') rest++;
+        if (*rest) { *rest++ = '\0'; while (*rest == ' ' || *rest == '\t') rest++; }
+        char* start_s = rest;
+        while (*rest && *rest != ' ' && *rest != '\t') rest++;
+        if (*rest) { *rest++ = '\0'; while (*rest == ' ' || *rest == '\t') rest++; }
+        char* end_s = rest;
+
+        uint32_t req = 0, resp = 0;
+        if      (!strcmp(ecu_s, "bcm"))    { req = BCM_REQ;   resp = BCM_RESP;   }
+        else if (!strcmp(ecu_s, "light"))  { req = LIGHT_REQ; resp = LIGHT_RESP; }
+        else if (!strcmp(ecu_s, "engine")) { req = ENG_REQ;   resp = ENG_RESP;   }
+        else { Serial.println("? scan <bcm|light|engine> <start_hex> <end_hex>"); return; }
+
+        uint16_t did_start = (uint16_t)strtoul(start_s, nullptr, 16);
+        uint16_t did_end   = (uint16_t)strtoul(end_s,   nullptr, 16);
+        if (did_end < did_start || did_end == 0) {
+            Serial.println("? bad range — e.g. scan engine 1300 130F");
+            return;
+        }
+        if ((uint32_t)did_end - did_start > 0x200) {
+            Serial.println("? range too large (max 512 DIDs / ~2 min)");
+            return;
+        }
+        poll_task::setScanRange(req, resp, did_start, did_end);
+        cmd_queue::push(CMD_SCAN, SRC_SERIAL);
+        Serial.printf("[cmd] scan %s 0x%04X..0x%04X queued\n", ecu_s, did_start, did_end);
+    }
     else if (!strcmp(cmd, "drl")) {
         if (!strcmp(arg, "on"))       { cmd_queue::push(CMD_DRL_ON,  SRC_SERIAL); Serial.println("[cmd] drl on queued"); }
         else if (!strcmp(arg, "off")) { cmd_queue::push(CMD_DRL_OFF, SRC_SERIAL); Serial.println("[cmd] drl off queued"); }
