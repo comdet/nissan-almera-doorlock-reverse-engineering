@@ -129,12 +129,14 @@ DOOR_BITS = {
     3: 'trunk',         # 0x08
 }
 
-# DID 0x0108 byte 27 — gear position
+# DID 0x1301 byte 3 — gear position (verified 2026-04-17 on car)
+# Single frame, fast, works engine off. Replaces old DID 0x0108 byte 27.
 GEAR_MAP = {
-    0x80: 'P',
-    0x00: 'R',
+    0x10: 'P',
+    0x20: 'R',
     0x40: 'N',
-    0xC0: 'D',  # D and L share same value
+    0x80: 'D',
+    0x08: 'L',
 }
 
 
@@ -171,16 +173,15 @@ def decode_doors(did_0109):
     return result
 
 
-def decode_gear(did_0108):
-    """Decode DID 0x0108 byte 27 → gear string.
+def decode_gear(did_1301):
+    """Decode DID 0x1301 byte 3 → gear string (P/R/N/D/L).
 
-    Note: byte 27 is reliable for gear only when engine is running.
-    When engine is off, handbrake/engine state contaminates the value.
+    ECU 0x7E1, single frame (4 bytes). Works even with engine off (ACC on).
     """
-    if not did_0108 or len(did_0108) < 28:
+    if not did_1301 or len(did_1301) < 4:
         return None
-    b27 = did_0108[27]
-    return GEAR_MAP.get(b27, f'?(0x{b27:02X})')
+    b3 = did_1301[3]
+    return GEAR_MAP.get(b3, f'?(0x{b3:02X})')
 
 
 def decode_handbrake(did_0e07):
@@ -216,8 +217,8 @@ def read_car_status(bus):
     if doors:
         status.update(doors)
 
-    # Gear (DID 0x0108)
-    d = bus.read_did(0x74C, 0x0108)
+    # Gear (DID 0x1301 @ Engine ECU — single frame, fast)
+    d = bus.read_did(0x7E1, 0x1301)
     gear = decode_gear(d)
     if gear:
         status['gear'] = gear

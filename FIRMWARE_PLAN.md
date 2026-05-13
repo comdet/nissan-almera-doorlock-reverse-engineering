@@ -74,9 +74,8 @@ CarState (mutex-protected struct)
 | ECU | Request ID | Response ID | ข้อมูล |
 |-----|-----------|-------------|--------|
 | BCM | 0x745 | 0x765 | Door lock/unlock, DRL, door/body status |
-| Body ECU 2 | 0x74C | 0x76C | Gear position (45-byte, NRC 0x78) |
 | Light ECU | 0x743 | 0x763 | Handbrake |
-| Engine ECU | 0x7E1 | 0x7E9 | Engine running status |
+| Engine ECU | 0x7E1 | 0x7E9 | Gear position + Engine running status |
 | OBD Broadcast | 0x7DF | 0x7E8 | Standard PIDs |
 
 ### Control Commands
@@ -95,8 +94,8 @@ CarState (mutex-protected struct)
 - Byte 8: lock (0x00=locked, 0x10=unlocked)
 - Byte 17: brake pedal (0x00=off, 0x0C=pressed)
 
-**DID 0x0108 (0x74C) — 45 bytes multiframe + NRC 0x78 (~3s wait):**
-- Byte 27: gear (0x80=P, 0x00=R, 0x40=N, 0xC0=D/L) — engine ON only
+**DID 0x1301 (0x7E1) — 4 bytes single frame:**
+- Byte 3: gear (0x10=P, 0x20=R, 0x40=N, 0x80=D, 0x08=L) — works engine off too
 
 **DID 0x0E07 (0x743) — 22 bytes multiframe:**
 - Byte 19: handbrake (0x10=ON, 0x00=OFF)
@@ -119,14 +118,16 @@ CarState (mutex-protected struct)
 
 ---
 
-## Polling Schedule
+## Polling Schedule — State-Driven (see STATE_MACHINE.md)
 
-~250ms per slot, 4 slots/second
+Polling rate depends on driving state, not a fixed schedule. Summary:
 
-**Fast (ทุก 500ms):** RPM, Speed, Throttle
-**Medium (ทุก 2s):** DID 0x0109 (doors/lock/lights), DID 0x0E07 (handbrake), Coolant, Battery
-**Slow (ทุก 10s):** DID 0x0108 (gear, non-blocking NRC 0x78), Ambient, Engine status, MIL
+**Fast (HUD, ทุก 500ms while driving):** RPM, Speed, Throttle
+**Medium (ทุก 2-3s):** DID 0x0109 (doors/lock/lights — free during DRL session)
+**Slow (ทุก 5-15s):** Coolant, Battery, Ambient, MIL, DID 0x0E07 (handbrake), DID 0x1301 (gear), DID 0x1304 (engine)
 **DRL keep-alive:** TesterPresent to BCM ทุก 1.2s เมื่อ DRL active
+
+When parked / engine off, polling rates slow dramatically to reduce ECU load.
 
 ---
 

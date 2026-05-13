@@ -39,19 +39,20 @@ void did0109(const uint8_t* data, size_t len, CarState& s) {
     }
 }
 
-void did0108(const uint8_t* data, size_t len, CarState& s) {
-    // Need [62 01 08 ... up to byte 27]
-    if (len < 28) return;
-    if (data[0] != 0x62 || data[1] != 0x01 || data[2] != 0x08) return;
+void did1301(const uint8_t* data, size_t len, CarState& s) {
+    // [62 13 01 byte3] — 4 bytes single frame from Engine ECU 0x7E1
+    // Verified 2026-04-17 on car: all 5 positions + engine off (ACC on).
+    // 0x10 P, 0x20 R, 0x40 N, 0x80 D, 0x08 L
+    if (len < 4) return;
+    if (data[0] != 0x62 || data[1] != 0x13 || data[2] != 0x01) return;
 
-    // Gear (byte 27) — reliable only when engine ON.
-    // 0x80 P, 0x00 R, 0x40 N, 0xC0 D/L
-    uint8_t b27 = data[27];
-    switch (b27) {
-        case 0x80: strcpy(s.gear, "P"); break;
-        case 0x00: strcpy(s.gear, "R"); break;
+    uint8_t b3 = data[3];
+    switch (b3) {
+        case 0x10: strcpy(s.gear, "P"); break;
+        case 0x20: strcpy(s.gear, "R"); break;
         case 0x40: strcpy(s.gear, "N"); break;
-        case 0xC0: strcpy(s.gear, "D"); break;
+        case 0x80: strcpy(s.gear, "D"); break;
+        case 0x08: strcpy(s.gear, "L"); break;
         default:   strcpy(s.gear, "?"); break;
     }
 }

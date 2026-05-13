@@ -118,7 +118,7 @@ size_t udsReadDid(uint32_t req_id, uint32_t resp_id, uint16_t did,
         if (!ff_seen && resp.data_length_code >= 4 &&
             resp.data[1] == SID_NEG_RESP && resp.data[2] == SID_READ_DID) {
             if (resp.data[3] == NRC_RESPONSE_PENDING) {
-                continue;  // wait — ECU busy (DID 0x0108 typical)
+                continue;  // wait — ECU busy (slow multiframe DIDs)
             }
             udsSetSession(req_id, resp_id, SESSION_DEFAULT);
             return 0;

@@ -31,15 +31,12 @@
 static const uint32_t BCM_REQ  = 0x745;
 static const uint32_t BCM_RESP = 0x765;
 
-// Body ECU 2: gear (DID 0x0108, 45 bytes, NRC 0x78)
-static const uint32_t BODY2_REQ  = 0x74C;
-static const uint32_t BODY2_RESP = 0x76C;
-
 // Light ECU: handbrake (DID 0x0E07, 22 bytes)
 static const uint32_t LIGHT_REQ  = 0x743;
 static const uint32_t LIGHT_RESP = 0x763;
 
-// Engine ECU (TCM/ECM): engine status (DID 0x1304)
+// Engine ECU (TCM/ECM): gear (DID 0x1301) + engine status (DID 0x1304)
+// Gear via 0x1301 — single frame, fast, all 5 positions (P/R/N/D/L), works engine off
 static const uint32_t ENG_REQ  = 0x7E1;
 static const uint32_t ENG_RESP = 0x7E9;
 
@@ -49,7 +46,7 @@ static const uint32_t OBD_RESP_ECM  = 0x7E8;
 
 // ---------------- DIDs (verified) ----------------
 static const uint16_t DID_DOOR_BODY   = 0x0109;  // BCM   — 18 bytes
-static const uint16_t DID_GEAR        = 0x0108;  // 0x74C — 45 bytes, NRC 0x78
+static const uint16_t DID_GEAR        = 0x1301;  // 0x7E1 — 4 bytes single frame (P/R/N/D/L)
 static const uint16_t DID_HANDBRAKE   = 0x0E07;  // 0x743 — 22 bytes
 static const uint16_t DID_ENGINE_RUN  = 0x1304;  // 0x7E1 — 4 bytes
 
@@ -75,12 +72,48 @@ static const uint8_t SESSION_EXTENDED = 0x03;
 
 static const uint8_t NRC_RESPONSE_PENDING = 0x78;
 
-// ---------------- Polling intervals (ms) ----------------
-// Phase 1: simple sequential polling — values are nominal
-static const uint32_t POLL_FAST_MS   = 500;    // RPM, Speed, Throttle
-static const uint32_t POLL_MED_MS    = 2000;   // DID 0x0109, DID 0x0E07, Coolant, Battery
-static const uint32_t POLL_SLOW_MS   = 10000;  // DID 0x0108 (gear), DID 0x1304, Ambient, MIL
-static const uint32_t PRINT_MS       = 2000;   // print snapshot
+// ---------------- Polling intervals (ms) — per state ----------------
+// State-driven polling: rate depends on what the driver is doing right now.
+// OBD PIDs (0x7DF) are safe to poll freely. Manufacturer DIDs require
+// ExtendedSession — poll those less when not needed. BCM 0x0109 is "free"
+// while DRL is active (BCM already in ExtSession via TesterPresent keep-alive).
+
+// ACC_ON: key turned, waiting for engine
+static const uint32_t POLL_ACC_RPM_MS   = 2000;
+static const uint32_t POLL_ACC_BATT_MS  = 10000;
+
+// ENGINE_ON: running, not yet moving
+static const uint32_t POLL_ENGON_FAST_MS = 1000;
+static const uint32_t POLL_ENGON_MED_MS  = 5000;
+static const uint32_t POLL_ENGON_BCM_MS  = 3000;
+static const uint32_t POLL_ENGON_GEAR_MS = 5000;
+static const uint32_t POLL_ENGON_HBRK_MS = 5000;
+static const uint32_t POLL_ENGON_ENG_MS  = 10000;
+
+// DRIVING / LOCKED_CRUISING: full HUD data
+static const uint32_t POLL_DRV_FAST_MS  = 500;
+static const uint32_t POLL_DRV_MED_MS   = 3000;
+static const uint32_t POLL_DRV_SLOW_MS  = 15000;
+static const uint32_t POLL_DRV_BCM_MS   = 2000;
+
+// LOCKED_STOPPED / REARM: watching doors + idle stop
+static const uint32_t POLL_STOP_FAST_MS = 1000;
+static const uint32_t POLL_STOP_BCM_MS  = 2000;
+static const uint32_t POLL_STOP_GEAR_MS = 3000;
+
+// ENGINE_OFF: countdown
+static const uint32_t POLL_OFF_RPM_MS   = 1000;
+
+// PARKED: safety check
+static const uint32_t POLL_PARK_BCM_MS  = 5000;
+static const uint32_t POLL_PARK_GEAR_MS = 10000;
+static const uint32_t POLL_PARK_HBRK_MS = 10000;
+
+// DRL keep-alive (BCM TesterPresent while drl_active)
+static const uint32_t DRL_TP_INTERVAL_MS = 1200;
+
+// Dashboard print
+static const uint32_t PRINT_MS = 2000;
 
 // ---------------- UDS timing ----------------
 static const uint32_t TIMEOUT_FRAME_MS    = 800;

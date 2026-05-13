@@ -25,8 +25,9 @@ void printSnapshotText() {
 
     Serial.println();
     Serial.println("================ Almera N18 — Snapshot ================");
-    Serial.printf("uptime: %lus  pollOK/fail: %lu/%lu  drl=%s  rxMiss=%lu txFail=%lu\n",
-                  millis() / 1000, poll_task::getPollOk(), poll_task::getPollFail(),
+    Serial.printf("state: %s  uptime: %lus  pollOK/fail: %lu/%lu  drl=%s  rxMiss=%lu txFail=%lu\n",
+                  poll_task::getStateName(), millis() / 1000,
+                  poll_task::getPollOk(), poll_task::getPollFail(),
                   poll_task::isDrlActive() ? "ON" : "off",
                   can_mgr::getRxMissed(), can_mgr::getTxFailed());
     Serial.println("-- Engine --");

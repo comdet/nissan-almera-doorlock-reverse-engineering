@@ -2,6 +2,7 @@
 #include "car_state.h"
 #include "nvs_config.h"
 #include "config.h"
+#include "poll_task.h"
 #include <ArduinoJson.h>
 #include <Arduino.h>
 
@@ -23,8 +24,9 @@ size_t buildHello(char* buf, size_t buf_size) {
 
 size_t buildStatus(char* buf, size_t buf_size) {
     JsonDocument doc;
-    doc["type"] = "status";
-    doc["ts"]   = millis();
+    doc["type"]  = "status";
+    doc["ts"]    = millis();
+    doc["state"] = poll_task::getStateName();
 
     {
         car_state::Guard g;

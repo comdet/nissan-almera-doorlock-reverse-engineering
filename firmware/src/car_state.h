@@ -36,8 +36,8 @@ struct CarState {
     bool turn_right          = false;
     uint8_t headlight_state  = 0;      // raw byte 5
 
-    // Body ECU 2 DID 0x0108 byte 27 (engine ON only)
-    char gear[3] = "?";   // "P","R","N","D","?"
+    // Engine ECU DID 0x1301 byte 3 — gear position (works engine off too)
+    char gear[3] = "?";   // "P","R","N","D","L","?"
 
     // Light ECU DID 0x0E07
     bool handbrake = false;
@@ -51,7 +51,7 @@ struct CarState {
     uint32_t ts_obd_med     = 0;
     uint32_t ts_obd_slow    = 0;
     uint32_t ts_did_0109    = 0;
-    uint32_t ts_did_0108    = 0;
+    uint32_t ts_did_1301    = 0;
     uint32_t ts_did_0e07    = 0;
     uint32_t ts_did_1304    = 0;
 };

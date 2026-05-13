@@ -14,7 +14,7 @@ namespace decode {
 // UDS payload starts with [62 DID_H DID_L ...] for ReadDataByIdentifier responses.
 // Pass the full payload (including the 62 header).
 void did0109(const uint8_t* data, size_t len, CarState& s);  // BCM doors/lock/lights
-void did0108(const uint8_t* data, size_t len, CarState& s);  // gear
+void did1301(const uint8_t* data, size_t len, CarState& s);  // gear (P/R/N/D/L)
 void did0E07(const uint8_t* data, size_t len, CarState& s);  // handbrake
 void did1304(const uint8_t* data, size_t len, CarState& s);  // engine running
 
