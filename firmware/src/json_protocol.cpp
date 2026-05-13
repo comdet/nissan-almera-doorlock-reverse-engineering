@@ -3,8 +3,10 @@
 #include "nvs_config.h"
 #include "config.h"
 #include "poll_task.h"
+#include "wifi_task.h"
 #include <ArduinoJson.h>
 #include <Arduino.h>
+#include <stdio.h>
 
 namespace json_proto {
 
@@ -62,6 +64,20 @@ size_t buildStatus(char* buf, size_t buf_size) {
         lights["turn_left"]  = s.turn_left;
         lights["turn_right"] = s.turn_right;
         lights["headlight_raw"] = s.headlight_state;
+    }
+
+    // Network info — handy for the Android side to confirm link health.
+    wifi_task::Info wi = wifi_task::snapshot();
+    JsonObject wifi = doc["wifi"].to<JsonObject>();
+    wifi["rssi"] = wi.rssi;
+    if (wi.wifi_connected) {
+        char ip_str[16];
+        snprintf(ip_str, sizeof(ip_str), "%u.%u.%u.%u",
+                 (unsigned)(wi.ip_v4 & 0xFF),
+                 (unsigned)((wi.ip_v4 >> 8) & 0xFF),
+                 (unsigned)((wi.ip_v4 >> 16) & 0xFF),
+                 (unsigned)((wi.ip_v4 >> 24) & 0xFF));
+        wifi["ip"] = ip_str;
     }
 
     size_t n = serializeJson(doc, buf, buf_size);
