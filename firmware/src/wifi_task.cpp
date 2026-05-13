@@ -2,6 +2,7 @@
 #include "nvs_config.h"
 #include "json_protocol.h"
 #include "cmd_queue.h"
+#include "poll_task.h"
 #include <Arduino.h>
 #include <WiFi.h>
 #include "freertos/FreeRTOS.h"
@@ -110,8 +111,10 @@ static void taskFn(void*) {
     uint32_t backoff = BACKOFF_MIN_MS;
 
     for (;;) {
-        // If disabled, just sleep — re-check periodically (user can flip via NVS).
-        if (!nvs_cfg::cfg.wifi_enabled) {
+        // If disabled OR car has been parked long enough for low-power mode,
+        // shut down WiFi and sleep. Wakes up automatically when poll_task
+        // exits PARKED on engine restart.
+        if (!nvs_cfg::cfg.wifi_enabled || poll_task::isLowPower()) {
             if (WiFi.getMode() != WIFI_OFF) {
                 WiFi.disconnect(true);
                 WiFi.mode(WIFI_OFF);

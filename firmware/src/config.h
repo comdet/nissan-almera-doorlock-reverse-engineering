@@ -105,10 +105,21 @@ static const uint32_t POLL_STOP_GEAR_MS = 3000;
 // ENGINE_OFF: countdown
 static const uint32_t POLL_OFF_RPM_MS   = 1000;
 
-// PARKED: safety check
-static const uint32_t POLL_PARK_BCM_MS  = 5000;
-static const uint32_t POLL_PARK_GEAR_MS = 10000;
-static const uint32_t POLL_PARK_HBRK_MS = 10000;
+// PARKED: safety check (only during first LOWPOWER_DELAY_MS), then low-power
+static const uint32_t POLL_PARK_BCM_MS    = 5000;
+static const uint32_t POLL_PARK_GEAR_MS   = 10000;
+static const uint32_t POLL_PARK_HBRK_MS   = 10000;
+
+// Low-power mode — car has been parked long enough that we don't need to
+// keep WiFi up or poll status. Only ping RPM occasionally to detect restart.
+static const uint32_t LOWPOWER_ENTER_MS   = 30000;   // 30s in PARKED before going low-power
+static const uint32_t POLL_PARK_LP_RPM_MS = 30000;   // ping RPM every 30s while low-power
+static const uint32_t LOWPOWER_TASK_DELAY_MS = 500;  // longer vTaskDelay between iterations
+
+// If no CAN response for this long in any non-driving state, assume the bus
+// is dead (ACC off / car parked) and enter low-power mode regardless of which
+// state we're nominally in. Handles boot-with-no-car and stuck states.
+static const uint32_t NO_RESP_LOWPOWER_MS = 60000;   // 60s of failed polls
 
 // DRL keep-alive (BCM TesterPresent while drl_active)
 static const uint32_t DRL_TP_INTERVAL_MS = 1200;

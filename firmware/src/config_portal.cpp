@@ -186,12 +186,15 @@ static void handleApiStatus() {
 }
 
 static void handleApiHealth() {
-    char buf[256];
+    char buf[320];
     snprintf(buf, sizeof(buf),
-        "{\"state\":\"%s\",\"uptime_s\":%lu,\"poll_ok\":%lu,\"poll_fail\":%lu,"
+        "{\"state\":\"%s\",\"lowpower\":%s,\"uptime_s\":%lu,"
+        "\"poll_ok\":%lu,\"poll_fail\":%lu,"
         "\"drl\":%s,\"rx_miss\":%lu,\"tx_fail\":%lu,"
         "\"free_heap\":%lu,\"min_free_heap\":%lu}",
-        poll_task::getStateName(), millis() / 1000,
+        poll_task::getStateName(),
+        poll_task::isLowPower() ? "true" : "false",
+        millis() / 1000,
         poll_task::getPollOk(), poll_task::getPollFail(),
         poll_task::isDrlActive() ? "true" : "false",
         can_mgr::getRxMissed(), can_mgr::getTxFailed(),
@@ -256,10 +259,12 @@ async function refresh(){
       fetch('/api/status').then(r=>r.json()),
       fetch('/api/health').then(r=>r.json())
     ]);
-    $('st').textContent = h.state || '—';
+    $('st').textContent = (h.state || '—') + (h.lowpower ? ' (LOW-POWER)' : '');
 
     $('health').innerHTML =
       row('uptime', h.uptime_s + 's') +
+      row('low-power', h.lowpower ? 'YES — WiFi off, RPM-only poll' : 'no',
+          h.lowpower ? 'warn' : 'off') +
       row('poll ok/fail', h.poll_ok + ' / ' + h.poll_fail) +
       row('DRL', h.drl ? 'ACTIVE' : 'off', h.drl?'on':'off') +
       row('rx miss / tx fail', h.rx_miss + ' / ' + h.tx_fail) +

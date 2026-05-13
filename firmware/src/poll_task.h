@@ -28,4 +28,9 @@ bool     isDrlActive();
 // Current state-machine state for status display / debugging.
 const char* getStateName();
 
+// True when the car has been PARKED long enough that we're in low-power mode
+// (WiFi off, polling slowed to a single RPM ping every ~30s). Comms tasks
+// (wifi_task) should suspend themselves while this is true.
+bool isLowPower();
+
 }  // namespace poll_task

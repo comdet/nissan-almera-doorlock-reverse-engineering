@@ -22,6 +22,11 @@ static uint8_t obdBuf[8];
 static volatile uint32_t pollOk   = 0;
 static volatile uint32_t pollFail = 0;
 
+// Time of the most recent successful poll — drives the "no-response" low-
+// power fallback. Initialised to boot time in taskFn so we don't trip
+// immediately at startup.
+static uint32_t last_ok_poll_ms = 0;
+
 uint32_t getPollOk()   { return pollOk; }
 uint32_t getPollFail() { return pollFail; }
 
@@ -59,6 +64,28 @@ static uint32_t state_entered_ms = 0;
 
 const char* getStateName() { return STATE_NAMES[(uint8_t)state]; }
 
+// In low-power when EITHER:
+//   - PARKED for >= LOWPOWER_ENTER_MS (normal flow: engine off, settled), OR
+//   - no successful CAN response for >= NO_RESP_LOWPOWER_MS in a non-driving
+//     state (handles boot-with-no-car, ACC off without state machine ever
+//     reaching PARKED).
+// While driving the bus is always alive so the second condition can't fire.
+bool isLowPower() {
+    const uint32_t now = millis();
+    if (state == DrvState::PARKED && (now - state_entered_ms) >= LOWPOWER_ENTER_MS) {
+        return true;
+    }
+    const bool driving = (state == DrvState::DRIVING
+                       || state == DrvState::LOCKED_CRUISING
+                       || state == DrvState::LOCKED_STOPPED
+                       || state == DrvState::REARM
+                       || state == DrvState::ENGINE_ON);
+    if (!driving && (now - last_ok_poll_ms) >= NO_RESP_LOWPOWER_MS) {
+        return true;
+    }
+    return false;
+}
+
 static void transitionTo(DrvState ns) {
     if (state == ns) return;
     Serial.printf("[state] %s -> %s\n", STATE_NAMES[(uint8_t)state], STATE_NAMES[(uint8_t)ns]);
@@ -87,6 +114,7 @@ static void obdPoll(uint8_t pid, void (*dec)(const uint8_t*, size_t, CarState&))
         if (g.ok()) {
             dec(obdBuf, n, car_state::state);
             pollOk++;
+            last_ok_poll_ms = millis();
             return;
         }
     }
@@ -103,6 +131,7 @@ static void didPoll(uint32_t req_id, uint32_t resp_id, uint16_t did,
             dec(didBuf, n, car_state::state);
             if (ts_field) *ts_field = millis();
             pollOk++;
+            last_ok_poll_ms = millis();
             return;
         }
     }
@@ -318,6 +347,13 @@ static uint32_t last_hbrk = 0;
 static uint32_t last_eng  = 0;
 
 static void pollForState() {
+    // Low-power override: in ALL states except active driving, if the bus
+    // has been silent long enough we just ping RPM occasionally.
+    if (isLowPower()) {
+        if (due(&last_fast, POLL_PARK_LP_RPM_MS)) pollRPM();
+        return;
+    }
+
     switch (state) {
 
     case DrvState::ACC_ON:
@@ -361,10 +397,16 @@ static void pollForState() {
         break;
 
     case DrvState::PARKED:
-        // Safety check + light monitoring
-        if (due(&last_bcm,  POLL_PARK_BCM_MS))    pollBCM();
-        if (due(&last_gear, POLL_PARK_GEAR_MS))   pollGear();
-        if (due(&last_hbrk, POLL_PARK_HBRK_MS))   pollHbrk();
+        if ((millis() - state_entered_ms) < LOWPOWER_ENTER_MS) {
+            // Window 0–30s: safety check (gear/handbrake/doors)
+            if (due(&last_bcm,  POLL_PARK_BCM_MS))    pollBCM();
+            if (due(&last_gear, POLL_PARK_GEAR_MS))   pollGear();
+            if (due(&last_hbrk, POLL_PARK_HBRK_MS))   pollHbrk();
+        } else {
+            // Low-power: only ping RPM every 30s to detect engine restart.
+            // WiFi is suspended by wifi_task (which checks isLowPower()).
+            if (due(&last_fast, POLL_PARK_LP_RPM_MS)) pollRPM();
+        }
         break;
     }
 }
@@ -409,8 +451,17 @@ static void execCmd(const Cmd& c) {
 
 static void taskFn(void*) {
     state_entered_ms = millis();
+    last_ok_poll_ms  = millis();
+    bool last_lp = false;
 
     for (;;) {
+        const bool lp = isLowPower();
+        if (lp != last_lp) {
+            Serial.printf("[power] %s\n", lp ? "→ LOW-POWER (WiFi off, RPM ping only)"
+                                              : "→ ACTIVE");
+            last_lp = lp;
+        }
+
         // 1. Drain queue with short timeout (acts as our pacer when idle).
         Cmd c;
         if (cmd_queue::pop(c, 50)) {
@@ -437,8 +488,9 @@ static void taskFn(void*) {
         // 5. Update state machine (may push auto-feature commands)
         updateStateMachine();
 
-        // Yield briefly to keep other tasks (comms) responsive.
-        vTaskDelay(pdMS_TO_TICKS(5));
+        // Yield. In low-power, sleep much longer to let CPU idle —
+        // the OS auto-clock-gates when no task is runnable.
+        vTaskDelay(pdMS_TO_TICKS(isLowPower() ? LOWPOWER_TASK_DELAY_MS : 5));
     }
 }
 

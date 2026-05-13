@@ -24,9 +24,10 @@ size_t buildHello(char* buf, size_t buf_size) {
 
 size_t buildStatus(char* buf, size_t buf_size) {
     JsonDocument doc;
-    doc["type"]  = "status";
-    doc["ts"]    = millis();
-    doc["state"] = poll_task::getStateName();
+    doc["type"]     = "status";
+    doc["ts"]       = millis();
+    doc["state"]    = poll_task::getStateName();
+    doc["lowpower"] = poll_task::isLowPower();
 
     {
         car_state::Guard g;
