@@ -1,6 +1,11 @@
 #include "config_portal.h"
 #include "config.h"
 #include "nvs_config.h"
+#include "can_manager.h"
+#include "car_state.h"
+#include "cmd_queue.h"
+#include "poll_task.h"
+#include "json_protocol.h"
 #include <Arduino.h>
 #include <WiFi.h>
 #include <WebServer.h>
@@ -65,6 +70,7 @@ static void renderPage(String& out, const char* note = "") {
     if (note && *note) {
         out += "<div class='note'>"; out += note; out += "</div>";
     }
+    out += F("<p><a href='/debug'>&rarr; Live Debug Page</a></p>");
     out += F("<form method='POST' action='/save'>");
 
     out += F("<h2>WiFi (Station — connect to HUD)</h2>");
@@ -165,6 +171,147 @@ static void handleNotFound() {
     server.send(302, "text/plain", "");
 }
 
+// ---------------- Debug page ----------------
+
+static void handleApiStatus() {
+    char buf[1024];
+    size_t n = json_proto::buildStatus(buf, sizeof(buf));
+    if (n == 0) {
+        server.send(503, "application/json", "{\"error\":\"car_state lock timeout\"}");
+        return;
+    }
+    // buildStatus appends '\n' — strip for cleaner JSON.
+    if (buf[n - 1] == '\n') buf[--n] = '\0';
+    server.send(200, "application/json; charset=utf-8", buf);
+}
+
+static void handleApiHealth() {
+    char buf[256];
+    snprintf(buf, sizeof(buf),
+        "{\"state\":\"%s\",\"uptime_s\":%lu,\"poll_ok\":%lu,\"poll_fail\":%lu,"
+        "\"drl\":%s,\"rx_miss\":%lu,\"tx_fail\":%lu,"
+        "\"free_heap\":%lu,\"min_free_heap\":%lu}",
+        poll_task::getStateName(), millis() / 1000,
+        poll_task::getPollOk(), poll_task::getPollFail(),
+        poll_task::isDrlActive() ? "true" : "false",
+        can_mgr::getRxMissed(), can_mgr::getTxFailed(),
+        (unsigned long)ESP.getFreeHeap(),
+        (unsigned long)ESP.getMinFreeHeap());
+    server.send(200, "application/json; charset=utf-8", buf);
+}
+
+static const char DEBUG_PAGE[] PROGMEM = R"HTML(<!DOCTYPE html>
+<html><head><meta charset='utf-8'>
+<meta name='viewport' content='width=device-width,initial-scale=1'>
+<title>Almera Debug</title>
+<style>
+body{font-family:sans-serif;max-width:640px;margin:0.5em auto;padding:0 0.5em;color:#222}
+h1{font-size:1.1em;margin:0.3em 0}
+h2{font-size:0.9em;margin:0.8em 0 0.2em;color:#555;border-bottom:1px solid #ccc}
+.state{font-size:1.4em;font-weight:bold;background:#eef;padding:0.4em 0.6em;border-radius:6px;margin:0.3em 0}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:0.2em 1em;font-size:0.9em}
+.row{display:flex;justify-content:space-between;padding:0.15em 0;border-bottom:1px dotted #eee}
+.row b{color:#666;font-weight:normal}
+.row span{font-family:monospace;color:#000}
+.on{color:#080;font-weight:bold}
+.off{color:#aaa}
+.warn{color:#c30;font-weight:bold}
+.nav{margin-top:1em}
+.nav a{margin-right:1em}
+</style></head>
+<body>
+<h1>Almera N18 — Live Debug</h1>
+<div class='state' id='st'>—</div>
+
+<h2>Health</h2>
+<div class='grid' id='health'></div>
+
+<h2>HUD</h2>
+<div class='grid' id='hud'></div>
+
+<h2>Engine</h2>
+<div class='grid' id='engine'></div>
+
+<h2>Body</h2>
+<div class='grid' id='body'></div>
+
+<h2>Lights</h2>
+<div class='grid' id='lights'></div>
+
+<div class='nav'><a href='/'>&larr; Config</a><a href='#' onclick='toggle()'>Toggle refresh</a></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const row = (label, val, cls='') =>
+  `<div class='row'><b>${label}</b><span class='${cls}'>${val}</span></div>`;
+const onoff = (v) => v ? ['ON','on'] : ['—','off'];
+
+let running = true;
+function toggle(){ running = !running; }
+
+async function refresh(){
+  if(!running) return;
+  try{
+    const [s,h] = await Promise.all([
+      fetch('/api/status').then(r=>r.json()),
+      fetch('/api/health').then(r=>r.json())
+    ]);
+    $('st').textContent = h.state || '—';
+
+    $('health').innerHTML =
+      row('uptime', h.uptime_s + 's') +
+      row('poll ok/fail', h.poll_ok + ' / ' + h.poll_fail) +
+      row('DRL', h.drl ? 'ACTIVE' : 'off', h.drl?'on':'off') +
+      row('rx miss / tx fail', h.rx_miss + ' / ' + h.tx_fail) +
+      row('heap free / min', h.free_heap + ' / ' + h.min_free_heap);
+
+    $('hud').innerHTML =
+      row('RPM', s.rpm ?? '—') +
+      row('Speed', (s.speed ?? '—') + ' km/h') +
+      row('Throttle', (s.throttle ?? '—') + ' %') +
+      row('Gear', s.gear ?? '—');
+
+    $('engine').innerHTML =
+      row('Coolant', (s.coolant ?? '—') + ' °C') +
+      row('Battery', (s.battery ?? '—') + ' V') +
+      row('Ambient', (s.ambient ?? '—') + ' °C') +
+      row('Running', ...onoff(s.engine_running)) +
+      row('MIL', ...onoff(s.mil)) +
+      row('DTC count', s.dtc_count ?? 0);
+
+    const d = s.doors || {};
+    $('body').innerHTML =
+      row('Lock', s.locked ? 'LOCKED' : 'unlocked', s.locked?'on':'off') +
+      row('Brake pedal', ...onoff(s.brake_pedal)) +
+      row('Handbrake', ...onoff(s.handbrake)) +
+      row('Driver door', ...onoff(d.driver)) +
+      row('Passenger door', ...onoff(d.passenger)) +
+      row('Rear L', ...onoff(d.rear_left)) +
+      row('Rear R', ...onoff(d.rear_right)) +
+      row('Trunk', ...onoff(d.trunk));
+
+    const l = s.lights || {};
+    $('lights').innerHTML =
+      row('Headlight', l.headlight_raw === 0x82 ? 'ON' : (l.headlight_raw === 0x02 ? 'parking' : 'off'),
+          l.headlight_raw === 0x82 ? 'on' : 'off') +
+      row('High beam', ...onoff(l.high_beam)) +
+      row('Parking', ...onoff(l.parking)) +
+      row('Turn L', ...onoff(l.turn_left)) +
+      row('Turn R', ...onoff(l.turn_right));
+  }catch(e){
+    $('st').textContent = 'fetch error: ' + e;
+  }
+}
+refresh();
+setInterval(refresh, 500);
+</script>
+</body></html>
+)HTML";
+
+static void handleDebug() {
+    server.send_P(200, "text/html; charset=utf-8", DEBUG_PAGE);
+}
+
 // ---------------- Entry point ----------------
 
 void run() {
@@ -176,6 +323,17 @@ void run() {
     nvs_cfg::cfg.config_mode_next_boot = false;
     nvs_cfg::save();
 
+    // Bring up car-state + CAN polling so /debug shows live data.
+    // (CAN may fail if no transceiver is attached — that's fine, just empty fields.)
+    car_state::init();
+    cmd_queue::init();
+    if (can_mgr::init()) {
+        poll_task::start(/*stack=*/6144, /*priority=*/3);
+        Serial.println("CAN+poll task started (debug page will have live data)");
+    } else {
+        Serial.println("CAN init failed — /debug will show only static fields");
+    }
+
     WiFi.persistent(false);
     WiFi.mode(WIFI_AP);
     bool ok = WiFi.softAP(CFG_AP_SSID, CFG_AP_PASS);
@@ -184,12 +342,16 @@ void run() {
     Serial.printf("AP SSID  : %s\n", CFG_AP_SSID);
     Serial.printf("AP PASS  : %s\n", CFG_AP_PASS);
     Serial.printf("AP start : %s\n", ok ? "ok" : "FAIL");
-    Serial.printf("URL      : http://%u.%u.%u.%u/\n",
+    Serial.printf("Config   : http://%u.%u.%u.%u/\n",
                   ip[0], ip[1], ip[2], ip[3]);
-    Serial.println("Connect to AP, open URL, edit, then Save & Reboot.");
+    Serial.printf("Debug    : http://%u.%u.%u.%u/debug\n",
+                  ip[0], ip[1], ip[2], ip[3]);
     Serial.println("(Long-press BOOT again or power-cycle to escape if browser is unavailable.)");
 
     server.on("/",              HTTP_GET,  handleRoot);
+    server.on("/debug",         HTTP_GET,  handleDebug);
+    server.on("/api/status",    HTTP_GET,  handleApiStatus);
+    server.on("/api/health",    HTTP_GET,  handleApiHealth);
     server.on("/save",          HTTP_POST, handleSave);
     server.on("/cancel",        HTTP_POST, handleCancel);
     server.on("/factory_reset", HTTP_POST, handleFactoryReset);
