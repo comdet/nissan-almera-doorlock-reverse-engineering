@@ -97,6 +97,12 @@ static void transitionTo(DrvState ns) {
 static bool prev_any_door_open = false;
 static bool door_event_pending = false;
 
+// Last gear that was actually readable from the ECU. Engine ECU 0x7E1 may
+// stop responding the instant the engine is killed, so the current gear
+// snapshot can read "?" even though the driver had just shifted to P. We
+// fall back to this for the ENGINE_OFF transition test.
+static char last_known_gear[3] = "?";
+
 // Engine-off countdown
 static uint32_t engine_off_at = 0;
 
@@ -206,10 +212,19 @@ static StateSnap snapshot() {
 // State Machine — transitions + auto-feature triggers
 // ============================================================================
 
-// Real engine-off (not idle-stop): RPM=0 AND gear=P
-// Idle stop keeps gear in D/N while RPM drops — we must NOT unlock for that.
+// Real engine-off vs idle-stop. Engine off requires RPM=0 plus the driver
+// having selected P. ECU 0x7E1 frequently stops responding the moment the
+// engine cuts, so the current snapshot may read "?" even when the driver
+// just shifted to P. Fall back to the most recent readable gear in that case.
+//
+//   rpm=0 + gear=P                         → real off            (normal)
+//   rpm=0 + gear=? + last_known_gear=P    → real off            (ECU silent)
+//   rpm=0 + gear=D|N + ...                → idle stop, NOT off  (CVT auto stop)
 static bool isRealEngineOff(const StateSnap& s) {
-    return s.rpm == 0 && strcmp(s.gear, "P") == 0;
+    if (s.rpm != 0) return false;
+    if (strcmp(s.gear, "P") == 0) return true;
+    if (s.gear[0] == '?' && strcmp(last_known_gear, "P") == 0) return true;
+    return false;
 }
 
 static void onEnterEngineOn() {
@@ -226,6 +241,14 @@ static void onEnterParked() {
 
 static void updateStateMachine() {
     StateSnap s = snapshot();
+
+    // Remember the most recent valid gear so isRealEngineOff() can still
+    // distinguish "parked then turned off" from "idle stop" after the engine
+    // ECU goes silent.
+    if (s.gear[0] != '?' && s.gear[0] != '\0') {
+        strncpy(last_known_gear, s.gear, sizeof(last_known_gear));
+        last_known_gear[sizeof(last_known_gear) - 1] = '\0';
+    }
 
     // Door open→close edge detection (used by circular locking)
     if (prev_any_door_open && !s.any_door_open) {
