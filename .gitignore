@@ -15,3 +15,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 firebase-debug.log
+
+# PlatformIO build artifacts
+.pio/
+.pioenvs/
+.piolibdeps/
+.vscode/
+*.factory.bin
