@@ -106,28 +106,6 @@ static char last_known_gear[3] = "?";
 // Engine-off countdown
 static uint32_t engine_off_at = 0;
 
-// Manual-unlock kill switch for auto-unlock.
-//
-// THE BUG THIS PREVENTS:
-//   In real driving the gear poll can miss the driver's P-shift if it
-//   happens within the same poll cycle as engine-off. car_state.gear stays
-//   "D" from the drive, isRealEngineOff() returns false, state machine is
-//   stuck in LOCKED_STOPPED, auto-unlock never fires.
-//
-//   The driver, finding the car still locked, manually unlocks, gets out,
-//   and remote-locks the car. Some seconds later the engine ECU happens
-//   to respond to a gear poll (bus glitch, BCM activity, whatever) — now
-//   gear="P", state machine transitions to ENGINE_OFF → fires CMD_UNLOCK
-//   while the car is locked from outside and unattended. The car's
-//   factory anti-theft alarm interprets this as an intrusion. Sirens.
-//
-// FIX:
-//   Track manual unlocks (locked: true→false) while we're in any locked
-//   state. Once seen, skip the auto-unlock for the rest of this session.
-//   The flag clears when the driver starts a fresh drive (ENGINE_ON).
-static bool user_unlocked_manually = false;
-static bool prev_locked_state      = false;
-
 // Track whether we have a "refresh now" pending — bumps all timers due.
 static volatile bool refresh_pending = false;
 
@@ -266,11 +244,6 @@ static void onEnterEngineOn() {
     if (nvs_cfg::cfg.auto_drl) {
         cmd_queue::push(CMD_DRL_ON, SRC_AUTO);
     }
-    // Fresh driving session — re-enable auto-unlock for this trip.
-    if (user_unlocked_manually) {
-        Serial.println("[auto] new drive session — re-enabling auto-unlock");
-        user_unlocked_manually = false;
-    }
 }
 
 static void onEnterParked() {
@@ -295,23 +268,6 @@ static void updateStateMachine() {
         door_event_pending = true;
     }
     prev_any_door_open = s.any_door_open;
-
-    // Manual-unlock detection — see header comment on user_unlocked_manually.
-    // Watch for a true→false transition on `locked` while we're nominally
-    // still in a locked state. Once seen, never fire auto-unlock for the
-    // rest of this session.
-    if (prev_locked_state && !s.locked) {
-        const bool in_locked_state =
-            state == DrvState::LOCKED_CRUISING ||
-            state == DrvState::LOCKED_STOPPED  ||
-            state == DrvState::REARM           ||
-            state == DrvState::ENGINE_OFF;
-        if (in_locked_state && !user_unlocked_manually) {
-            Serial.println("[auto] manual unlock detected — auto-unlock disabled until next engine start");
-            user_unlocked_manually = true;
-        }
-    }
-    prev_locked_state = s.locked;
 
     const bool engine_running = s.rpm > 0;
     const bool real_off       = isRealEngineOff(s);
@@ -396,10 +352,8 @@ static void updateStateMachine() {
             break;
         }
         if (millis() - engine_off_at >= (uint32_t)nvs_cfg::cfg.unlock_delay * 1000UL) {
-            if (nvs_cfg::cfg.auto_unlock && !user_unlocked_manually) {
+            if (nvs_cfg::cfg.auto_unlock) {
                 cmd_queue::push(CMD_UNLOCK, SRC_AUTO);
-            } else if (user_unlocked_manually) {
-                Serial.println("[auto] skip unlock — user took manual control earlier");
             }
             transitionTo(DrvState::PARKED);
             onEnterParked();
