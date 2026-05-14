@@ -101,9 +101,18 @@ static const uint32_t POLL_DRV_GEAR_MS  = 10000;  // keep fresh — avoid stale 
 // Fast poll 500ms so we catch RPM→0 within half a second — the rest of
 // the unlock pipeline (state transition + countdown) is bottlenecked on
 // this, so faster here = faster auto-unlock.
+//
+// Gear at 1500ms (was 3000): the driver's P-shift-then-key-off sequence
+// happens fast. If gear is still being reported as D from the drive when
+// the engine cuts, isRealEngineOff() never fires until the engine ECU
+// eventually answers again (which it might do minutes later when the
+// driver has already walked away — that's the late-unlock anti-theft-
+// alarm bug we saw on the road). Polling more often closes the window.
+// Cheap when the engine is running (~100ms per call); skipped entirely
+// when RPM=0 so it doesn't burden us during engine-off.
 static const uint32_t POLL_STOP_FAST_MS = 500;
 static const uint32_t POLL_STOP_BCM_MS  = 2000;
-static const uint32_t POLL_STOP_GEAR_MS = 3000;
+static const uint32_t POLL_STOP_GEAR_MS = 1500;
 
 // ENGINE_OFF: countdown — keep this short so restart-cancel is responsive
 static const uint32_t POLL_OFF_RPM_MS   = 500;
