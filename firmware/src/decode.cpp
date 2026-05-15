@@ -33,10 +33,10 @@ void did0109(const uint8_t* data, size_t len, CarState& s) {
     s.locked   = (b8 == 0x00);
     s.unlocked = (b8 == 0x10);
 
-    // Brake pedal (byte 17)
-    if (len > 17) {
-        s.brake_pedal = (data[17] != 0x00);
-    }
+    // NOTE: byte 17 was previously decoded as brake-pedal but it turned out
+    // to be stale — it stays at 0x0C through key off and doesn't reflect the
+    // pedal in real time. The reliable brake source is DID 0x0E07 byte 19
+    // bit 3 (see did0E07). Byte 17 is left undecoded for now.
 }
 
 void did1301(const uint8_t* data, size_t len, CarState& s) {
@@ -62,8 +62,21 @@ void did0E07(const uint8_t* data, size_t len, CarState& s) {
     if (len < 20) return;
     if (data[0] != 0x62 || data[1] != 0x0E || data[2] != 0x07) return;
 
-    // Handbrake (byte 19): 0x10 ON, 0x00 OFF
-    s.handbrake = (data[19] == 0x10);
+    // Byte 19 is a bitmask — verified on the car 2026-05-15:
+    //   bit 4 (0x10) = handbrake / parking-brake engaged (held across engine
+    //                   off when the ECU is alive; may drop when ECU sleeps)
+    //   bit 3 (0x08) = brake pedal pressed (real-time, reliable)
+    // Observed values: 0x00, 0x08, 0x10, 0x18 — all combos of the two bits.
+    //
+    // The earlier "byte 19 == 0x10" check captured handbrake correctly when
+    // the brake pedal was released (only path with bit 4 set), but reported
+    // handbrake=false when the driver was both pulling the parking brake AND
+    // pressing the pedal (which is the normal park sequence). Use bit
+    // arithmetic so both signals are independent.
+    uint8_t b19 = data[19];
+    s.handbrake     = (b19 & 0x10) != 0;
+    s.brake_pedal   = (b19 & 0x08) != 0;   // overrides the stale BCM byte 17 source
+    s.e07_byte19_raw = b19;
 }
 
 void did1304(const uint8_t* data, size_t len, CarState& s) {

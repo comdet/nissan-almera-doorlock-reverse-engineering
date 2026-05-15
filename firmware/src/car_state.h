@@ -40,7 +40,8 @@ struct CarState {
     char gear[3] = "?";   // "P","R","N","D","L","?"
 
     // Light ECU DID 0x0E07
-    bool handbrake = false;
+    bool    handbrake       = false;  // byte 19 bit 4 (0x10)
+    uint8_t e07_byte19_raw  = 0;      // for debug — full bitmask
 
     // Engine ECU DID 0x1304 byte 3
     bool engine_running = false;

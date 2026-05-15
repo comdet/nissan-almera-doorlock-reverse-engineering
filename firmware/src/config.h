@@ -101,12 +101,22 @@ static const uint32_t POLL_DRV_GEAR_MS  = 10000;  // keep fresh — avoid stale 
 // Fast poll 500ms so we catch RPM→0 within half a second — the rest of
 // the unlock pipeline (state transition + countdown) is bottlenecked on
 // this, so faster here = faster auto-unlock.
+//
+// Gear at 1000ms (was 3000) — driver's "shift to P, key off" can happen in
+// 1-2 seconds; we need to catch the brief window where ECU 0x7E1 is still
+// reporting "P" before it goes silent. Without this, car_state.gear stays
+// at "D" from driving and the engine-off transition never fires.
+//
+// Handbrake at 2000ms — needs to stay fresh for the HUD's pre-shutdown
+// "did you forget the parking brake?" warning.
 static const uint32_t POLL_STOP_FAST_MS = 500;
 static const uint32_t POLL_STOP_BCM_MS  = 2000;
-static const uint32_t POLL_STOP_GEAR_MS = 3000;
+static const uint32_t POLL_STOP_GEAR_MS = 1000;
+static const uint32_t POLL_STOP_HBRK_MS = 2000;
 
 // ENGINE_OFF: countdown — keep this short so restart-cancel is responsive
 static const uint32_t POLL_OFF_RPM_MS   = 500;
+static const uint32_t POLL_OFF_HBRK_MS  = 1000;  // last chance to refresh handbrake before WiFi drops
 
 // PARKED: safety check (only during first LOWPOWER_DELAY_MS), then low-power
 static const uint32_t POLL_PARK_BCM_MS    = 5000;

@@ -421,25 +421,30 @@ static void pollForState() {
 
     case DrvState::LOCKED_STOPPED:
     case DrvState::REARM:
-        // Stopped — watch RPM/Speed + doors (for circular lock) + gear (idle stop check)
-        if (due(&last_fast, POLL_STOP_FAST_MS)) { pollRPM(); pollSpeed(); }
-        if (due(&last_bcm,  POLL_STOP_BCM_MS))    pollBCM();
-        // Skip gear poll when RPM=0: engine ECU will be silent and the read
-        // will burn ~1.5s timeout for nothing. car_state.gear keeps its last
-        // value (which is what isRealEngineOff() reads) so the state-machine
-        // transition fires immediately. While idle-stop is active the ECU
-        // stays alive, so it still responds; only true engine-off triggers
-        // the skip.
-        if (due(&last_gear, POLL_STOP_GEAR_MS)) {
-            car_state::Guard g(50);
-            bool rpm_zero = g.ok() && (car_state::state.rpm == 0);
-            if (!rpm_zero) pollGear();
-        }
+        // Stopped — watch RPM/Speed + doors (circular lock) + gear (idle stop /
+        // engine-off discriminator) + handbrake (for HUD pre-shutdown warning).
+        //
+        // The earlier "skip gear poll when RPM=0" optimization was removed:
+        // it caused car_state.gear to stay stale at whatever the driver had
+        // before stopping (usually "D"), so isRealEngineOff() never fired
+        // — auto-unlock stayed broken indefinitely on the real car.
+        //
+        // After key off, ECU 0x7E1 may briefly respond with byte 3 = 0x00
+        // (decoded as "?") for a few seconds before going silent. That's
+        // enough for the last_known_gear fallback to do its job, provided
+        // the gear poll was actually fresh when the driver shifted to P.
+        if (due(&last_fast, POLL_STOP_FAST_MS))  { pollRPM(); pollSpeed(); }
+        if (due(&last_bcm,  POLL_STOP_BCM_MS))     pollBCM();
+        if (due(&last_gear, POLL_STOP_GEAR_MS))    pollGear();
+        if (due(&last_hbrk, POLL_STOP_HBRK_MS))    pollHbrk();
         break;
 
     case DrvState::ENGINE_OFF:
-        // 3s countdown — just RPM to detect restart
+        // 3s countdown — RPM (detect restart) + handbrake (so HUD has fresh
+        // status before it goes dark — driver may need a "shift to P / pull
+        // handbrake" reminder)
         if (due(&last_fast, POLL_OFF_RPM_MS))     pollRPM();
+        if (due(&last_hbrk, POLL_OFF_HBRK_MS))    pollHbrk();
         break;
 
     case DrvState::PARKED:
