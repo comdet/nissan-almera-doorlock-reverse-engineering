@@ -53,7 +53,11 @@ void did1301(const uint8_t* data, size_t len, CarState& s) {
         case 0x40: strcpy(s.gear, "N"); break;
         case 0x80: strcpy(s.gear, "D"); break;
         case 0x08: strcpy(s.gear, "L"); break;
-        default:   strcpy(s.gear, "?"); break;
+        default:   /* unknown byte (e.g. ECU wind-down transient 0x00/0x01) —
+                      keep the last valid gear instead of clobbering it to "?".
+                      A garbage response from a dying ECU shouldn't overwrite
+                      the "P" we just captured a moment ago. */
+                   break;
     }
 }
 

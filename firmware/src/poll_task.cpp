@@ -97,12 +97,6 @@ static void transitionTo(DrvState ns) {
 static bool prev_any_door_open = false;
 static bool door_event_pending = false;
 
-// Last gear that was actually readable from the ECU. Engine ECU 0x7E1 may
-// stop responding the instant the engine is killed, so the current gear
-// snapshot can read "?" even though the driver had just shifted to P. We
-// fall back to this for the ENGINE_OFF transition test.
-static char last_known_gear[3] = "?";
-
 // Engine-off countdown
 static uint32_t engine_off_at = 0;
 
@@ -225,19 +219,39 @@ static StateSnap snapshot() {
 // State Machine — transitions + auto-feature triggers
 // ============================================================================
 
-// Real engine-off vs idle-stop. Engine off requires RPM=0 plus the driver
-// having selected P. ECU 0x7E1 frequently stops responding the moment the
-// engine cuts, so the current snapshot may read "?" even when the driver
-// just shifted to P. Fall back to the most recent readable gear in that case.
+// Real engine-off vs idle-stop discriminator.
 //
-//   rpm=0 + gear=P                         → real off            (normal)
-//   rpm=0 + gear=? + last_known_gear=P    → real off            (ECU silent)
-//   rpm=0 + gear=D|N + ...                → idle stop, NOT off  (CVT auto stop)
+// Both states have RPM=0. The difference comes from the engine ECU at 0x7E1:
+//   - Idle stop (CVT auto-stop)  → ECU stays awake to manage the restart;
+//                                   it keeps answering UDS queries with the
+//                                   current gear (D/N), so the snapshot is
+//                                   live and gear != "P".
+//   - Key off                    → ECU loses power within ~1s. Either we
+//                                   captured the driver's shift to "P" just
+//                                   before that, or the ECU goes silent and
+//                                   ts_did_1301 stops advancing.
+//
+// Two stateless paths to "engine off". Both reflect physical reality, no
+// cached last-good-gear needed:
+//
+//   (1) gear == "P" + rpm == 0   — normal park: driver shifted to P, we
+//                                   read it on a recent poll. The decoder
+//                                   no longer clobbers gear on garbage
+//                                   bytes, so a valid "P" stays valid.
+//   (2) ECU 0x7E1 silent > N ms  — power is gone. Whatever gear was last
+//                                   read doesn't matter; the ECU only goes
+//                                   silent at key off, never during idle stop.
 static bool isRealEngineOff(const StateSnap& s) {
     if (s.rpm != 0) return false;
     if (strcmp(s.gear, "P") == 0) return true;
-    if (s.gear[0] == '?' && strcmp(last_known_gear, "P") == 0) return true;
-    return false;
+
+    uint32_t age_ms;
+    {
+        car_state::Guard g;
+        if (!g.ok()) return false;
+        age_ms = millis() - car_state::state.ts_did_1301;
+    }
+    return age_ms > ENGINE_ECU_SILENT_MS;
 }
 
 static void onEnterEngineOn() {
@@ -254,14 +268,6 @@ static void onEnterParked() {
 
 static void updateStateMachine() {
     StateSnap s = snapshot();
-
-    // Remember the most recent valid gear so isRealEngineOff() can still
-    // distinguish "parked then turned off" from "idle stop" after the engine
-    // ECU goes silent.
-    if (s.gear[0] != '?' && s.gear[0] != '\0') {
-        strncpy(last_known_gear, s.gear, sizeof(last_known_gear));
-        last_known_gear[sizeof(last_known_gear) - 1] = '\0';
-    }
 
     // Door open→close edge detection (used by circular locking)
     if (prev_any_door_open && !s.any_door_open) {
@@ -421,18 +427,15 @@ static void pollForState() {
 
     case DrvState::LOCKED_STOPPED:
     case DrvState::REARM:
-        // Stopped — watch RPM/Speed + doors (circular lock) + gear (idle stop /
-        // engine-off discriminator) + handbrake (for HUD pre-shutdown warning).
+        // Stopped — watch RPM/Speed + doors (circular lock) + gear (idle stop
+        // vs engine-off discriminator) + handbrake (HUD pre-shutdown warning).
         //
-        // The earlier "skip gear poll when RPM=0" optimization was removed:
-        // it caused car_state.gear to stay stale at whatever the driver had
-        // before stopping (usually "D"), so isRealEngineOff() never fired
-        // — auto-unlock stayed broken indefinitely on the real car.
-        //
-        // After key off, ECU 0x7E1 may briefly respond with byte 3 = 0x00
-        // (decoded as "?") for a few seconds before going silent. That's
-        // enough for the last_known_gear fallback to do its job, provided
-        // the gear poll was actually fresh when the driver shifted to P.
+        // Gear must keep polling at RPM=0 — that's the window in which we
+        // need to either capture "P" (driver parking) or watch ts_did_1301
+        // start aging out (ECU shutting down). isRealEngineOff() uses both:
+        // a fresh "P" reading fires immediately, and a stale ts_did_1301
+        // (>ENGINE_ECU_SILENT_MS) covers the race where the ECU goes silent
+        // before we managed to read "P".
         if (due(&last_fast, POLL_STOP_FAST_MS))  { pollRPM(); pollSpeed(); }
         if (due(&last_bcm,  POLL_STOP_BCM_MS))     pollBCM();
         if (due(&last_gear, POLL_STOP_GEAR_MS))    pollGear();

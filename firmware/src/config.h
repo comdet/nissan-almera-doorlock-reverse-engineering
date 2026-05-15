@@ -140,6 +140,15 @@ static const uint32_t DRL_TP_INTERVAL_MS = 1200;
 // Dashboard print
 static const uint32_t PRINT_MS = 2000;
 
+// Engine ECU silence threshold — if ts_did_1301 (last successful gear poll
+// from 0x7E1) is older than this, we treat the engine ECU as powered down.
+// Used by isRealEngineOff() as the second of two paths: gear=="P" is the
+// fast path (driver shifted to P, captured before key off); ECU silence is
+// the fallback for races where we didn't catch "P" before the bus went dead.
+// 2s is comfortably longer than (POLL_STOP_GEAR_MS + TIMEOUT_PENDING_MS),
+// so a single transient failure won't trip it.
+static const uint32_t ENGINE_ECU_SILENT_MS = 2000;
+
 // ---------------- UDS timing ----------------
 static const uint32_t TIMEOUT_FRAME_MS    = 800;
 // Used to be 5000 to accommodate DID 0x0108's NRC 0x78 ~3s delay. We dropped
