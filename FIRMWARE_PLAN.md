@@ -259,8 +259,15 @@ lib_deps =
 - **Tier 2 low-power**: PARKED >30s → WiFi off + RPM ping every 30s
   (~70% current draw reduction without going to deep sleep)
 - **No-response fallback**: 60s without successful poll → low-power even outside PARKED
-- **Last-known gear**: engine ECU goes silent at shutdown; we keep the last good gear so unlock still fires
-- **Auto-unlock latency**: cut from ~7s → ~1.5s via UDS-timeout drop, gear-skip-when-RPM=0, faster RPM poll
+- **Engine-off detection (stateless)**: two paths in `isRealEngineOff()` —
+  (1) `gear == "P"` + `RPM = 0`, or
+  (2) `ts_did_1301` stale > `ENGINE_ECU_SILENT_MS` (2s, ECU 0x7E1 powered down).
+  No cached `last_known_gear` needed since idle stop keeps the ECU alive while
+  key off kills it within ~1s.
+- **Auto-unlock latency**: ~3s observed on car after key off (verified 2026-05-15).
+  Dominated by `unlock_delay` countdown (default 3s, NVS-configurable). Could
+  likely tune to ~1.5s with more on-car data — see TODO in `poll_task.cpp`
+  ENGINE_OFF case.
 
 ### Bonus
 - **Web config portal** (`config_portal.{h,cpp}`) — long-press BOOT, AP + form
