@@ -18,7 +18,7 @@ static void applyDefaults() {
     cfg.auto_unlock   = true;
     cfg.auto_drl      = true;
     cfg.lock_speed    = 20;
-    cfg.unlock_delay  = 3;
+    cfg.unlock_delay  = 1;
     cfg.json_on_serial = false;
     cfg.config_mode_next_boot = false;
 }

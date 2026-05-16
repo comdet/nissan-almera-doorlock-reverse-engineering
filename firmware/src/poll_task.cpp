@@ -351,14 +351,12 @@ static void updateStateMachine() {
         break;
 
     case DrvState::ENGINE_OFF:
-        // TODO(unlock-latency): observed ~3s door unlock latency after key off
-        // on the real car. ~all of it is the unlock_delay countdown (default
-        // 3s, from NVS config). The countdown exists so a brief stall + restart
-        // doesn't unlock the doors mid-drive — but 3s is conservative.
-        // Could probably drop to 1-1.5s safely: by the time we enter ENGINE_OFF
-        // we've already confirmed RPM=0 plus either gear=P or 2s of ECU silence,
-        // so the "false engine off" risk is low. Wait for more on-car data before
-        // tuning.
+        // Countdown before firing auto-unlock. unlock_delay is NVS-configurable
+        // (default 1s — tuned down from the original 3s after the stateless
+        // engine-off detection landed). By the time we're in this state we've
+        // already confirmed RPM=0 plus either gear=P or 2s of ECU silence,
+        // so the "false engine off" risk is low. Keep > 0 so a brief stall +
+        // restart can still cancel via the engine_running check below.
         if (engine_running) {
             Serial.println("[auto] engine restart during countdown — cancel unlock");
             transitionTo(DrvState::ENGINE_ON);

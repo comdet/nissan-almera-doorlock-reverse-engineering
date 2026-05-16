@@ -264,10 +264,11 @@ lib_deps =
   (2) `ts_did_1301` stale > `ENGINE_ECU_SILENT_MS` (2s, ECU 0x7E1 powered down).
   No cached `last_known_gear` needed since idle stop keeps the ECU alive while
   key off kills it within ~1s.
-- **Auto-unlock latency**: ~3s observed on car after key off (verified 2026-05-15).
-  Dominated by `unlock_delay` countdown (default 3s, NVS-configurable). Could
-  likely tune to ~1.5s with more on-car data — see TODO in `poll_task.cpp`
-  ENGINE_OFF case.
+- **Auto-unlock latency**: target ~1.5s after key off. `unlock_delay` countdown
+  reduced 3s → 1s (default, NVS-configurable) now that the dual-path engine-off
+  detector makes false-positives very unlikely. Path 1 (gear=P captured) →
+  ~1.5s total; Path 2 (ECU silence fallback) → ~3s total. Brief stall + restart
+  is still cancelled by the `engine_running` check inside ENGINE_OFF.
 
 ### Bonus
 - **Web config portal** (`config_portal.{h,cpp}`) — long-press BOOT, AP + form
