@@ -2,16 +2,19 @@
 
 > **โปรเจคนี้ออกจาก reverse engineering ไปเป็น firmware ที่ใช้งานจริงแล้ว**
 >
-> ดูสถานะปัจจุบัน + วิธีต่อ Android HUD:
+> 🚀 **Firmware repo:** [comdet/KuroObdBridge](https://github.com/comdet/KuroObdBridge)
+> — ESP32-C3 Car Companion firmware: state machine, auto-lock/unlock/DRL,
+> WiFi TCP ไป Android HUD. Implementation plan, state walkthrough, HUD
+> integration spec อยู่ใน repo นั้นทั้งหมด
 >
-> - 📘 **[HUD_PROTOCOL.md](HUD_PROTOCOL.md)** — Android integration spec (TCP/JSON, all fields, all commands)
-> - 🧠 **[STATE_MACHINE.md](STATE_MACHINE.md)** — 8-state driving machine, scenario by scenario
-> - 🛠️ **[FIRMWARE_PLAN.md](FIRMWARE_PLAN.md)** — implementation phases (all 6 done)
-> - 🔬 **[DECODED_DIDS.md](DECODED_DIDS.md)** — verified byte mappings
+> Repo นี้เหลือเฉพาะ **research/discovery** ที่ทำให้เราถึงจุดนี้ได้:
 >
-> Firmware source: [`firmware/src/`](firmware/src/) — ESP32-C3 + PlatformIO
+> - 🔬 **[DECODED_DIDS.md](DECODED_DIDS.md)** — verified byte mappings ของ DID ที่ค้นเจอ
+> - 📊 **[OBD_PID_SCAN_RESULTS.md](OBD_PID_SCAN_RESULTS.md)** — OBD-II PIDs ที่รถ support
+> - 📋 **[MANUFACTURER_DID_BASELINE.md](MANUFACTURER_DID_BASELINE.md)** — baseline DID dumps
+> - 🛠️ **[FINDINGS_ESP32_SLCAN.md](FINDINGS_ESP32_SLCAN.md)** — SLCAN bridge findings (firmware รุ่นแรก)
 >
-> Everything below is the original reverse-engineering writeup that got us here.
+> ทุกอย่างหลังจากนี้คือ writeup ดั้งเดิมของการ reverse engineer
 
 ---
 
@@ -1005,4 +1008,4 @@ ELM327 v1.5 clone มีขีดจำกัด **สูงสุด 4 bytes** 
 
 1. **เช็ค STN1110** — ส่ง `STI` ดูว่า clone เป็น STN1110 ที่ซ่อนอยู่หรือไม่ (ถ้าใช่ `STPX` ส่ง raw CAN ได้ไม่จำกัด)
 2. **ELM327 v2.x ของแท้** — ไม่มี payload limit
-3. **ESP32-C3 + SN65HVD230 CAN transceiver** — ใช้ SLCAN firmware จาก `firmware/` ใน repo นี้ ต่อ CAN bus ตรง ไม่ผ่าน ELM327
+3. **ESP32-C3 + SN65HVD230 CAN transceiver** — ต่อ CAN bus ตรง ไม่ผ่าน ELM327 ดูที่ [comdet/KuroObdBridge](https://github.com/comdet/KuroObdBridge) (firmware ตัวเต็มที่ทำต่อจาก SLCAN รุ่นแรก)
