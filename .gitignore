@@ -22,3 +22,7 @@ firebase-debug.log
 .piolibdeps/
 .vscode/
 *.factory.bin
+
+# Sibling firmware repo cloned locally for convenience.
+# Lives at https://github.com/comdet/KuroObdBridge — managed independently.
+KuroObdBridge/
